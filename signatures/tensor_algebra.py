@@ -186,6 +186,12 @@ class TensorAlgebra:
             raise ValueError("Dimension of path should be less than 3.")
         return self.from_array(trunc=trunc, array=array)
 
+    def plot_coefficients(self, ts: TensorSequence):
+        """
+
+        """
+        raise NotImplementedError()
+
     # TODO: Add truncation level for products.
     @staticmethod
     def tensor_prod(ts1: TensorSequence, ts2: TensorSequence) -> TensorSequence:
