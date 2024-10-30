@@ -1,5 +1,4 @@
 import numpy as np
-from typing import Union
 from numpy.typing import NDArray
 from numpy import int64
 from math import floor
@@ -43,10 +42,8 @@ class Alphabet:
         """
         if word in ["", "∅", "Ø"]:
             return 0
-        length = len(str(word))
-        num = np.sum((np.array([ord(a) - ord("0") for a in word], dtype=int64) - 1) *
-                     self.__dim**(np.arange(length - 1, -1, -1)))
-        return num
+        return np.sum((np.array([ord(a) - ord("0") for a in word], dtype=int64) - 1) *
+                      self.__dim**(np.arange(len(str(word)) - 1, -1, -1)))
 
     def word_to_index(self, word: str) -> int:
         """
@@ -57,8 +54,18 @@ class Alphabet:
         """
         if word in ["", "∅", "Ø"]:
             return 0
-        index = self.__dim ** len(str(word)) - 1 + self.word_to_base_dim_number(word=word)
-        return index
+        return self.__dim ** len(str(word)) - 1 + self.word_to_base_dim_number(word=word)
+
+    def int_to_index(self, word: int) -> int:
+        """
+        Converts a word to its corresponding one-dimensional index in the tensor algebra.
+
+        :param word: An integer representing the word to convert.
+        :return: An integer representing the index of the word.
+        """
+        if word == 0:
+            return 0
+        return self.__dim ** len(str(word)) - 1 + self.word_to_base_dim_number(word=str(word))
 
     def index_to_word(self, index: int) -> str:
         """
@@ -78,6 +85,25 @@ class Alphabet:
             index = index % p
             word_list[i] = str(int(digit) + 1)
         return "".join(word_list)
+
+    def index_to_int(self, index: int) -> int:
+        """
+        Converts an index back to its corresponding word in the alphabet.
+
+        :param index: An integer representing the index to convert.
+        :return: A string representing the word corresponding to the given index.
+        """
+        if not index:
+            return 0
+        length = floor(np.log2(index + 1) / np.log2(self.__dim))
+        index = index - (self.__dim ** length - 1)
+        res = 0
+        for i in range(length):
+            p = self.__dim ** (length - 1 - i)
+            digit = index // p
+            index = index % p
+            res = 10 * res + (int(digit) + 1)
+        return res
 
     def index_to_length(self, index: NDArray[int64]) -> NDArray[int64]:
         """

@@ -1,4 +1,5 @@
-from numba import jit
+import numpy as np
+from numba import jit, int64
 
 
 @jit(nopython=True)
@@ -14,10 +15,14 @@ def combinations(pool, r):
     n = len(pool)
     indices = list(range(r))
     empty = not(n and (0 < r <= n))
+    l = (factorial(n) // factorial(r) // factorial(n - r))
+    res = np.zeros((l, r), dtype=int64)
+    it = 0
 
     if not empty:
         result = [pool[i] for i in indices]
-        yield result
+        res[it] = result
+        it = it + 1
 
     while not empty:
         i = r - 1
@@ -31,4 +36,7 @@ def combinations(pool, r):
                 indices[j] = indices[j - 1] + 1
 
             result = [pool[i] for i in indices]
-            yield result
+            res[it] = result
+            it = it + 1
+
+    return res

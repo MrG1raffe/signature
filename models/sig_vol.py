@@ -199,7 +199,7 @@ class SigVol(CharacteristicFunctionModel):
         return F_traj
 
 
-@njit(parallel=True)
+@jit(parallel=True, nopython=True)
 def jit_parallel_char_func(
     t_grid: NDArray[float64],
     u_arr: NDArray[complex128],

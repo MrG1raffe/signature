@@ -2,7 +2,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 from numpy import int64, complex128
-from typing import Union
+from typing import Union, Tuple
 from numba.experimental import jitclass
 import numba as nb
 
@@ -112,6 +112,23 @@ class TensorSequence:
         """
         return self * (1 / c)
 
+    @staticmethod
+    def add_indices_and_arrays(indices_1: NDArray[complex128], array_1: NDArray[complex128],
+                               indices_2: NDArray[complex128], array_2: NDArray[complex128]) -> Tuple[NDArray[complex128], NDArray[complex128]]:
+        concatenated_indices = np.zeros(indices_1.size + indices_2.size)
+        concatenated_indices[:indices_1.size] = indices_1
+        concatenated_indices[indices_1.size:] = indices_2
+
+        new_indices = np.unique(concatenated_indices)
+
+        indices_first = np.searchsorted(new_indices, indices_1)
+        indices_second = np.searchsorted(new_indices, indices_2)
+
+        new_array = np.zeros((len(new_indices),) + array_1.shape[1:], dtype=complex128)
+        new_array[indices_first] = new_array[indices_first] + array_1
+        new_array[indices_second] = new_array[indices_second] + array_2
+        return new_indices, new_array
+
     def __add__(self, ts: TensorSequence) -> TensorSequence:
         """
         Adds another TensorSequence to the current one.
@@ -126,18 +143,20 @@ class TensorSequence:
         if self.__array.shape[1] != ts.array.shape[1]:
             raise ValueError("Time grids of sequences should be the same.")
 
-        concatenated_indices = np.zeros(self.__indices.size + ts.indices.size)
-        concatenated_indices[:self.__indices.size] = self.__indices
-        concatenated_indices[self.__indices.size:] = ts.indices
-
-        new_indices = np.unique(concatenated_indices)
-
-        indices_first = np.searchsorted(new_indices, self.__indices)
-        indices_second = np.searchsorted(new_indices, ts.indices)
-
-        new_array = np.zeros((len(new_indices),) + self.__array.shape[1:], dtype=complex128)
-        new_array[indices_first] = new_array[indices_first] + self.__array
-        new_array[indices_second] = new_array[indices_second] + ts.array
+        # concatenated_indices = np.zeros(self.__indices.size + ts.indices.size)
+        # concatenated_indices[:self.__indices.size] = self.__indices
+        # concatenated_indices[self.__indices.size:] = ts.indices
+        #
+        # new_indices = np.unique(concatenated_indices)
+        #
+        # indices_first = np.searchsorted(new_indices, self.__indices)
+        # indices_second = np.searchsorted(new_indices, ts.indices)
+        #
+        # new_array = np.zeros((len(new_indices),) + self.__array.shape[1:], dtype=complex128)
+        # new_array[indices_first] = new_array[indices_first] + self.__array
+        # new_array[indices_second] = new_array[indices_second] + ts.array
+        new_indices, new_array = self.add_indices_and_arrays(self.indices, self.array,
+                                                             ts.indices, ts.array)
         return TensorSequence(self.__alphabet, self.__trunc, new_array, new_indices)
 
     def __sub__(self, ts: TensorSequence) -> TensorSequence:
@@ -205,6 +224,15 @@ class TensorSequence:
         self.__array = self.__array[idx_to_keep]
 
     @property
+    def alphabet(self) -> NDArray[complex128]:
+        """
+        Returns the array of tensor coefficients.
+
+        :return: A numpy array of tensor coefficients.
+        """
+        return self.__alphabet
+
+    @property
     def array(self) -> NDArray[complex128]:
         """
         Returns the array of tensor coefficients.
@@ -230,6 +258,17 @@ class TensorSequence:
         :return: A numpy array of indices.
         """
         return self.__indices
+
+    def update(self, ts: TensorSequence) -> None:
+        """
+        Updates the attributes of the instance copying the attributes of ts.
+
+        :param ts: tensor sequence which attributes will be used as new attributes of self.
+        """
+        self.__alphabet = ts.alphabet
+        self.__trunc = ts.trunc
+        self.__array = ts.array
+        self.__indices = ts.indices
 
     def norm_inf(self) -> NDArray[complex128]:
         """
@@ -302,7 +341,7 @@ class TensorSequence:
         res = self.__zero()
         for i, other_index in enumerate(other_indices):
             coefficient = other_array[i]
-            res = res + self.tensor_prod_index(other_index, coefficient)
+            res.update(res + self.tensor_prod_index(other_index, coefficient))
         return res
 
     def shuffle_prod(self, ts: TensorSequence) -> TensorSequence:
@@ -312,24 +351,26 @@ class TensorSequence:
         :param ts: The other TensorSequence to shuffle multiply with.
         :return: A new TensorSequence representing the shuffle product.
         """
-        res = self.__zero()
+        res_indices = np.zeros(0)
+        res_array = np.zeros((0,) + self.array.shape[1:], dtype=complex128)
 
-        words_self = [self.__alphabet.index_to_word(index) for index in self.indices]
-        words_other = [self.__alphabet.index_to_word(index) for index in ts.indices]
+        words_self = [self.__alphabet.index_to_int(index) for index in self.indices]
+        words_other = [self.__alphabet.index_to_int(index) for index in ts.indices]
+
+        trunc = max(self.trunc, ts.trunc)
 
         for i_self, word_self in enumerate(words_self):
             for i_other, word_other in enumerate(words_other):
-                if len(word_self) + len(word_other) <= res.trunc:
+                if len(str(word_self)) + len(str(word_other)) <= trunc:
                     shuffle_words, counts = shuffle_product(word_self, word_other)
-                    shuffle_indices = np.array([self.__alphabet.word_to_index(word) for word in shuffle_words],
-                                               dtype=int64)
+                    shuffle_indices = np.array([self.__alphabet.int_to_index(word) for word in shuffle_words], dtype=int64)
                     coefficients = self.array[i_self] * ts.array[i_other]
-                    shuffle_array = np.reshape(counts, (-1, 1, 1)) * \
-                                    np.reshape(coefficients, (1,) + coefficients.shape)
+                    shuffle_array = (np.reshape(counts, (-1, 1, 1)) *
+                                     np.reshape(coefficients, (1,) + coefficients.shape)).astype(complex128)
 
-                    ts_shuffle = TensorSequence(self.__alphabet, self.__trunc, shuffle_array, shuffle_indices)
-                    res = res + ts_shuffle
-        return res
+                    res_indices, res_array = self.add_indices_and_arrays(res_indices, res_array,
+                                                                         shuffle_indices, shuffle_array)
+        return TensorSequence(self.__alphabet, trunc, res_array, res_indices)
 
     def tensor_pow(self, p: int) -> TensorSequence:
         """
@@ -341,10 +382,10 @@ class TensorSequence:
         if p == 0:
             return self.__unit()
 
-        res = self
+        res = self * 1
         # TODO: think about more efficient implementation (with log_2(p) operations)
         for _ in range(p - 1):
-            res = res.tensor_prod(self)
+            res.update(res.tensor_prod(self))
         return res
 
     def shuffle_pow(self, p: int) -> TensorSequence:
@@ -357,10 +398,10 @@ class TensorSequence:
         if p == 0:
             return self.__unit()
 
-        res = self
+        res = self.__unit()
         # TODO: think about more efficient implementation (with log_2(p) operations)
-        for _ in range(p - 1):
-            res = res.shuffle_prod(self)
+        for _ in range(p):
+            res.update(res.shuffle_prod(self))
         return res
 
     def tensor_exp(self, N_trunc: int) -> TensorSequence:
@@ -372,7 +413,7 @@ class TensorSequence:
         """
         res = self.__unit()
         for n in range(1, N_trunc):
-            res = res + self.tensor_pow(n) / factorial(n)
+            res.update(res + self.tensor_pow(n) / factorial(n))
         return res
 
     def shuffle_exp(self, N_trunc: int) -> TensorSequence:
@@ -384,7 +425,7 @@ class TensorSequence:
         """
         res = self.__unit()
         for n in range(1, N_trunc):
-            res = res + self.shuffle_pow(n) / factorial(n)
+            res.update(res + self.shuffle_pow(n) / factorial(n))
         return res
 
     def resolvent(self, N_trunc):
@@ -400,7 +441,5 @@ class TensorSequence:
             raise ValueError("Resolvent cannot be calculated. The tensor sequence l should have |l^∅| < 1.")
         res = self.__unit()
         for n in range(1, N_trunc):
-            res = res + self.tensor_pow(n)
+            res.update(res + self.tensor_pow(n))
         return res
-
-

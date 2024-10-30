@@ -2,6 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 from numpy import float64, int64
 from typing import Union
+import matplotlib.pyplot as plt
 
 from signatures.tensor_sequence import TensorSequence
 from signatures.alphabet import Alphabet
@@ -186,11 +187,36 @@ class TensorAlgebra:
             raise ValueError("Dimension of path should be less than 3.")
         return self.from_array(trunc=trunc, array=array)
 
-    def plot_coefficients(self, ts: TensorSequence):
+    def plot_coefficients(self, ts: TensorSequence, trunc: int = None, nonzero: bool = False,
+                          ax: plt.axis = None, **kwargs) -> None:
         """
+        Plots the coefficients of a given tensor sequence.
 
+        :param ts: tensor sequence to plot.
+        :param trunc: truncation order, the coefficients of order <= trunc will be plotted. By default, equals to ts.trunc.
+        :param nonzero: whether to plot only non-zero coefficients.
+        :param ax: plt axis to plot on.
         """
-        raise NotImplementedError()
+        if trunc is None:
+            trunc = ts.trunc
+
+        n_coefficients = 2**(trunc + 1) - 1
+        if nonzero:
+            indices = ts.indices[ts.indices < n_coefficients]
+            coefficients = ts.array[ts.indices < n_coefficients].squeeze().real
+        else:
+            indices = np.arange(n_coefficients)
+            coefficients = np.zeros(n_coefficients)
+            coefficients[ts.indices[ts.indices < n_coefficients]] = ts.array[ts.indices < n_coefficients].squeeze().real
+
+        if ax is None:
+            fig, ax = plt.subplots()
+        ax.plot(coefficients, "o", **kwargs)
+        ax.grid("on")
+        ax.set_xticks(ticks=np.arange(coefficients.size),
+                      labels=[self.alphabet.index_to_word(i) for i in indices],
+                      rotation=-90)
+        ax.plot()
 
     # TODO: Add truncation level for products.
     @staticmethod
