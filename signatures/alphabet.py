@@ -33,6 +33,16 @@ class Alphabet:
         """
         return self.__dim
 
+    def number_of_elements(self, trunc: int):
+        """
+        Calculates the number of elements corresponding to the words of length up to trunc.
+
+        :param trunc: maximal word length.
+
+        :return: Number of words v such that |v| <= trunc.
+        """
+        return (self.dim ** (trunc + 1) - 1) // (self.dim - 1)
+
     def word_to_base_dim_number(self, word: str) -> int:
         """
         Converts a word to the corresponding number with base dim.

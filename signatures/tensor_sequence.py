@@ -51,7 +51,7 @@ class TensorSequence:
         else:
             raise ValueError("Array can be at most 3-dimensional.")
         if len(indices):
-            mask = indices < self.__alphabet.dim**(trunc + 1) - 1
+            mask = indices < (self.__alphabet.dim**(trunc + 1) - 1) / (self.__alphabet.dim - 1)
             indices, reshaped_array = indices[mask], reshaped_array[mask]
 
         self.__indices = indices.astype(int64)

@@ -1,7 +1,95 @@
 from numba import jit
 import numpy as np
+from numpy.typing import NDArray
+from numpy import float64, complex128
+from typing import Union
 
 from signatures.tensor_sequence import TensorSequence
+from signatures.alphabet import Alphabet
+from signatures.numba_utility import factorial
+
+def stationary_signature_from_path(
+    path: NDArray[float64],
+    trunc: int,
+    t_grid: NDArray[float64],
+    lam: float
+) -> TensorSequence:
+    """
+    Computes the stationary signature with coefficient lam corresponding to a given d-dimensional path on the
+    time grid t_grid up to the order trunc.
+
+    :param path: Path as NDArray of shape (len(t_grid), d).
+    :param trunc: Truncation order, i.e. maximal order of coefficients to be calculated.
+    :param t_grid: Time grid as NDArray. An increasing time grid from T0 < 0 to T > 0. The signature is calculated
+        only for the positive values of grid.
+    :param lam: signature mean reversion coefficient.
+
+    :return: TensorSequence objet corresponding to a trajectory of signature of the path on t_grid corresponding
+        to the positive values t_grid[t_grid >= 0]
+    """
+    dim = path.shape[1]
+    alphabet = Alphabet(dim)
+
+    dt = np.diff(t_grid)
+    path_inc = (path[1:] - path[:-1]) / np.reshape(dt, (-1, 1))
+
+    n_indices = alphabet.number_of_elements(trunc)
+    array_steps = np.zeros((n_indices, t_grid.size - 1))
+    array_steps[0] = 1
+
+    # Calculates step arrays: each array array_steps[:, k] corresponds to the signature bb{X}_{t_k, t_{k + 1}}.
+    # n-th level of this signature is the tensor product of the path increments path[k + 1] - path[k] multiplied
+    # by a signature of the linear path given by the function __h.
+    for n in range(1, trunc + 1):
+        tp_n = path_inc
+        for i in range(n - 1):
+            inc_shape = (path_inc.shape[0],) + (1,) * (len(tp_n.shape) - 1) + (path_inc.shape[1],)
+            tp_n = tp_n.reshape(tp_n.shape + (1,)) * path_inc.reshape(inc_shape)
+
+        idx_start = alphabet.number_of_elements(n - 1)
+        array_steps[idx_start:idx_start + dim ** n] = tp_n.reshape((path_inc.shape[0], -1)).T * __h(dt=dt, n=n, lam=lam)
+
+    return __sum_steps_stat(array_steps, trunc, alphabet, t_grid, lam)
+
+@jit(nopython=True)
+def __h(dt: Union[float, NDArray[float64]], n: int, lam: float):
+    """
+    Calculates a stationary lambda-signature of order n of the path X_t = t on [0, dt].
+    """
+    return ((1 - np.exp(-lam * dt)) / lam)**n / factorial(n)
+
+@jit(nopython=True)
+def __sum_steps_stat(
+    array_steps: NDArray[float64],
+    trunc: int,
+    alphabet: Alphabet,
+    t_grid: NDArray[float64],
+    lam: float
+) -> TensorSequence:
+    """
+    Transforms the signatures bb{X}_{t_k, t_{k + 1}} of linear paths into the path signatures bb{X}_{t_{k + 1}}
+    using the Chen's identity.
+    """
+    dt = np.diff(t_grid)
+    n_indices = alphabet.number_of_elements(trunc)
+    indices = np.arange(array_steps.shape[0])
+    ts_steps = [TensorSequence(alphabet, trunc,
+                               np.ascontiguousarray(array_steps[:, i]).reshape((n_indices, 1, 1)), indices)
+                for i in range(array_steps.shape[1])]
+    for i in range(len(ts_steps) - 1):
+        # Stationary Chan's identity
+        ts_steps[i + 1].update(discount_ts(ts=ts_steps[i], dt=dt[i + 1], lam=lam).tensor_prod(ts_steps[i + 1]))
+
+    n_pos_points = np.sum(t_grid >= 0)
+    array_res = np.zeros((n_indices, n_pos_points), dtype=complex128)
+
+    for i, ts in enumerate(ts_steps[-n_pos_points:]):
+        # Creating an array corresponding to the positive time points.
+        array_res[ts.indices, i] = ts.array[:, 0, 0]
+
+    return TensorSequence(alphabet, trunc, array_res, indices)
+
+### Operators ###
 
 @jit(nopython=True)
 def G(ts: TensorSequence) -> TensorSequence:
