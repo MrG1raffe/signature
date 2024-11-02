@@ -224,7 +224,7 @@ class TensorSequence:
         self.__array = self.__array[idx_to_keep]
 
     @property
-    def alphabet(self) -> NDArray[complex128]:
+    def alphabet(self) -> Alphabet:
         """
         Returns the array of tensor coefficients.
 

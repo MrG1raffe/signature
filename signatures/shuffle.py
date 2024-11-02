@@ -1,5 +1,5 @@
 import numpy as np
-from numpy import int64, float64
+from numpy import int64
 from numba import jit
 from typing import Tuple
 
@@ -36,7 +36,7 @@ def shuffle_product(word_1: int, word_2: int) -> Tuple:
     indices[:, l1:] = indices_right
 
     powers = l1 + l2 - 1 - indices
-    shuffle = ((10 ** powers).astype(float64) @ letters.astype(float64)).astype(int64)
+    shuffle = np.sum((10 ** powers).astype(int64) * letters.astype(int64), axis=1)
 
     sorted_shuffle = np.zeros(shuffle.size + 1, dtype=int64)
     sorted_shuffle[:shuffle.size] = np.sort(shuffle)
