@@ -59,29 +59,26 @@ class TensorSequence:
 
         self.remove_zeros()
 
-    def __getitem__(self, key: str) -> Union[complex128, NDArray[complex128]]:
+    def __getitem__(self, key: Union[str, int]) -> Union[complex128, NDArray[complex128], TensorSequence]:
         """
-        Retrieves the coefficient associated with a given word.
+        Retrieves the coefficient associated with a given word if key is a string.
+        If key is int, returns a tensor sequence corresponding in the time dimension (axis 1 of self.array).
 
-        :param key: A string representing a word formed from the alphabet.
-        :return: The tensor coefficient corresponding to the given word.
+        :param key: A string representing a word formed from the alphabet or integer representing the time index.
+        :return: The tensor coefficient corresponding to the given word if type(key) == str
+            or an instance of TensorSequence with the time index key if type(key) == int.
         """
-        word_index = self.__alphabet.word_to_index(key)
+        if isinstance(key, str):
+            word_index = self.__alphabet.word_to_index(key)
 
-        if word_index not in self.indices:
-            return np.zeros((self.array.shape[1:]), dtype=complex128)
+            if word_index not in self.indices:
+                return np.zeros((self.array.shape[1:]), dtype=complex128)
 
-        array_index = np.searchsorted(self.indices, word_index)
-        return self.__array[array_index]
-
-    # TODO: current print version is quite ugly. Understand how to cast float to str with numba.
-    def print(self) -> None:
-        """
-        Prints  the TensorSequence as pairs of words and corresponding coefficients.
-        """
-        indices = sorted(self.indices)
-        for i, index in enumerate(indices):
-            print(self.__alphabet.index_to_word(index) + ":", self.__array[i])
+            array_index = np.searchsorted(self.indices, word_index)
+            return self.__array[array_index]
+        else:
+            indexed_arr = np.ascontiguousarray(self.array[:, key, :])
+            return TensorSequence(self.alphabet, self.trunc, indexed_arr, self.indices)
 
     def __rmul__(self, c: Union[float, complex, NDArray[complex128]]) -> TensorSequence:
         """
@@ -143,18 +140,6 @@ class TensorSequence:
         if self.__array.shape[1] != ts.array.shape[1]:
             raise ValueError("Time grids of sequences should be the same.")
 
-        # concatenated_indices = np.zeros(self.__indices.size + ts.indices.size)
-        # concatenated_indices[:self.__indices.size] = self.__indices
-        # concatenated_indices[self.__indices.size:] = ts.indices
-        #
-        # new_indices = np.unique(concatenated_indices)
-        #
-        # indices_first = np.searchsorted(new_indices, self.__indices)
-        # indices_second = np.searchsorted(new_indices, ts.indices)
-        #
-        # new_array = np.zeros((len(new_indices),) + self.__array.shape[1:], dtype=complex128)
-        # new_array[indices_first] = new_array[indices_first] + self.__array
-        # new_array[indices_second] = new_array[indices_second] + ts.array
         new_indices, new_array = self.add_indices_and_arrays(self.indices, self.array,
                                                              ts.indices, ts.array)
         return TensorSequence(self.__alphabet, self.__trunc, new_array, new_indices)
@@ -213,6 +198,32 @@ class TensorSequence:
         """
         self_shape = (1,) + self.array.shape[1:]
         return TensorSequence(self.__alphabet, self.__trunc, np.ones(self_shape), np.zeros(1))
+
+    @staticmethod
+    def zero(alphabet, trunc) -> TensorSequence:
+        """
+        Creates an instance of TensorSequence with no indices and the same sizes of other axis.
+
+        :param alphabet: An Alphabet object that defines the dimension and convertion functions.
+        :param trunc: The truncation level, i.e., the maximum length of words considered in this TensorSequence.
+
+        :return: A new zero TensorSequence.
+        """
+        self_shape = (0, 1, 1)
+        return TensorSequence(alphabet, trunc, np.zeros(self_shape), np.zeros(0))
+
+    @staticmethod
+    def unit(alphabet, trunc) -> TensorSequence:
+        """
+        Creates an instance of TensorSequence with index 1 corresponding to the word Ø.
+
+        :param alphabet: An Alphabet object that defines the dimension and convertion functions.
+        :param trunc: The truncation level, i.e., the maximum length of words considered in this TensorSequence.
+
+        :return: A unit element as TensorSequence.
+        """
+        self_shape = (1, 1, 1)
+        return TensorSequence(alphabet, trunc, np.ones(self_shape), np.zeros(1))
 
     def remove_zeros(self) -> None:
         """

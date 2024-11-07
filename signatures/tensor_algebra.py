@@ -36,7 +36,6 @@ class TensorAlgebra:
         self.from_dict(word_dict={"": np.arange(5), "2": 2 * np.arange(5)}, trunc=2)
         self.from_array(trunc=2, array=np.ones((15, 10, 10)))
         empty = self.from_dict({}, trunc=1)
-        empty.print()
         (ts[""], 2 * ts, ts * 2, ts / 2, ts + ts2, ts - ts, ts @ ts)
         (len(ts), bool(ts), ts.array, ts.trunc, ts.indices)
         (ts.norm_inf(), ts.proj(""), ts.tensor_prod_word("1"), ts.tensor_prod_index(1),

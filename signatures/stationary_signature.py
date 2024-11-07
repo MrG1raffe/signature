@@ -70,7 +70,7 @@ def __sum_steps_stat(
     Transforms the signatures bb{X}_{t_k, t_{k + 1}} of linear paths into the path signatures bb{X}_{t_{k + 1}}
     using the Chen's identity.
     """
-    dt = np.diff(t_grid)
+    dt = t_grid[1:] - t_grid[:-1]
     n_indices = alphabet.number_of_elements(trunc)
     indices = np.arange(array_steps.shape[0])
     ts_steps = [TensorSequence(alphabet, trunc,
@@ -103,6 +103,20 @@ def G(ts: TensorSequence) -> TensorSequence:
 
     return TensorSequence(ts.alphabet, ts.trunc,
                           ts.array * np.reshape(ts.alphabet.index_to_length(ts.indices), ts.array.shape),
+                          ts.indices)
+
+@jit(nopython=True)
+def G_inv(ts: TensorSequence) -> TensorSequence:
+    """
+    An operator dividing the coefficients of tensor sequence by the lengths of the corresponding words (pseudo-inverse of G).
+
+    :param ts: tensor sequence to transform.
+
+    :return: G^{-1}(ts) as a new instance of TensorSequence.
+    """
+
+    return TensorSequence(ts.alphabet, ts.trunc,
+                          ts.array * np.where(ts.indices != 0, 1 /ts.alphabet.index_to_length(ts.indices), 0).reshape(ts.array.shape),
                           ts.indices)
 
 @jit(nopython=True)
@@ -139,5 +153,19 @@ def semi_integrated_scheme(ts: TensorSequence, dt: float, lam: float) -> TensorS
                               np.where(ts.indices != 0, (1 - np.exp(-ts.alphabet.index_to_length(ts.indices) * lam * dt)) /
                               (lam * ts.alphabet.index_to_length(ts.indices)), dt),
                               ts.array.shape),
+                          ts.indices)
+
+@jit(nopython=True)
+def G_resolvent(ts: TensorSequence, lam: float) -> TensorSequence:
+    """
+    Calculates the operator (Id + lam * G)^{-1}
+
+    :param ts: tensor sequence to transform.
+    :param lam: mean-reversion rate.
+
+    :return: A result of application of the operator to ts.
+    """
+    return TensorSequence(ts.alphabet, ts.trunc,
+                          ts.array * np.reshape(1 / (1 + lam * ts.alphabet.index_to_length(ts.indices)), ts.array.shape),
                           ts.indices)
 

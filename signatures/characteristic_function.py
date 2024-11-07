@@ -2,6 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 from numpy import float64
 from numba import jit
+from typing import Callable
 
 from signatures.tensor_sequence import TensorSequence
 from signatures.stationary_signature import G, semi_integrated_scheme, discount_ts
@@ -71,19 +72,20 @@ def psi_riccati_pece(
 
 @jit(nopython=True)
 def psi_riccati_pece_stat(
+    func: Callable,
     t_grid: NDArray[float64],
     u: TensorSequence,
     lam: float
 ) -> TensorSequence:
     res = np.zeros(t_grid.size, dtype=float64)
-    dt = np.diff(t_grid)
+    dt = t_grid[1:] - t_grid[:-1]
 
     psi = u * 1
     psi_pred = u * 1
     res[0] = np.real(psi[""][0][0])
     for i in range(len(dt)):
-        psi_pred.update(discount_ts(ts=psi, dt=dt[i], lam=lam) + semi_integrated_scheme(ts=func_psi(psi), dt=dt[i], lam=lam))
-        psi.update(discount_ts(ts=psi, dt=dt[i], lam=lam) + semi_integrated_scheme(ts=(func_psi(psi_pred) + func_psi(psi)) * 0.5, dt=dt[i], lam=lam))
+        psi_pred.update(discount_ts(ts=psi, dt=dt[i], lam=lam) + semi_integrated_scheme(ts=func(psi), dt=dt[i], lam=lam))
+        psi.update(discount_ts(ts=psi, dt=dt[i], lam=lam) + semi_integrated_scheme(ts=(func(psi_pred) + func(psi)) * 0.5, dt=dt[i], lam=lam))
         res[i + 1] = np.real(psi[""][0][0])
 
     return psi, res
