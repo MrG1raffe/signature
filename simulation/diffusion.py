@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Union, Callable
+from typing import Union, Callable, Tuple
 from numpy.typing import NDArray
 from numpy import float_
 
@@ -52,6 +52,27 @@ class Diffusion:
                     rng=self.rng
                 )
 
+    @staticmethod
+    def __get_pseudo_square_root(
+        R: NDArray[float_],
+        method: str = "cholesky"
+    ) -> NDArray[float_]:
+        """
+        Calculates a pseudo-square root matrix of R satisfying R = A @ A.T using the given method.
+
+        Args:
+            R: positively definite symmetric square matrix.
+            method: method to compute the square root. Possbile value: "cholesky". By default, "cholesky".
+
+        Returns:
+            A psedo-square root of R.
+        """
+        if method == "cholesky":
+            return np.linalg.cholesky(R)
+        else:
+            raise NotImplementedError()
+
+
     def replace_brownian_motion(
         self,
         W_traj: NDArray[float_],
@@ -71,7 +92,7 @@ class Diffusion:
 
     def brownian_motion_increments(
         self,
-        dims: Union[float, NDArray[float_]] = None,
+        dims: Tuple[int]= None,
         squeeze: bool = False
     ) -> NDArray[float_]:
         """
@@ -96,7 +117,7 @@ class Diffusion:
         drift: Union[float, NDArray[float_]] = 0,
         correlation: Union[float, NDArray[float_]] = None,
         vol: Union[float, NDArray[float_]] = 1,
-        dims: Union[float, NDArray[float_]] = None,
+        dims: Tuple[int] = None,
         squeeze: bool = False
     ) -> Union[float, NDArray[float_]]:
         """
@@ -121,7 +142,7 @@ class Diffusion:
         if correlation is None:
             L = np.eye(len(dims))
         else:
-            L = np.linalg.cholesky(correlation)
+            L = self.__get_pseudo_square_root(R=correlation)
         traj = init_val[None, :, None] + drift[None, :, None] * self.t_grid[None, None, :] + \
             vol[None, :, None] * np.einsum('ij,kjl->kil', L, self.W_traj[:, dims, :])
         return traj.squeeze() if squeeze else traj
@@ -132,7 +153,7 @@ class Diffusion:
         drift: Union[float, NDArray[float_]] = 0,
         correlation: Union[float, NDArray[float_]] = None,
         vol: Union[float, NDArray[float_]] = 1,
-        dims: Union[float, NDArray[float_]] = None,
+        dims: Tuple[int] = None,
         squeeze: bool = False
     ) -> Union[float, NDArray[float_]]:
         """
@@ -164,13 +185,76 @@ class Diffusion:
         traj = init_val[None, :, None] * np.exp(W)
         return traj.squeeze() if squeeze else traj
 
+    def ornstein_uhlenbeck(
+        self,
+        init_val: Union[float, NDArray[float_]] = 0,
+        correlation: Union[float, NDArray[float_]] = None,
+        lam: Union[float, NDArray[float_]] = 1,
+        theta: Union[float, NDArray[float_]] = 0,
+        sigma: Union[float, NDArray[float_]] = 1,
+        dims: Tuple[int] = None,
+        squeeze: bool = False
+    ) -> Union[float, NDArray[float_]]:
+        """
+        Simulates the trajectory of the d-dimensional Ornstein-Uhlenbeck process
+        dX_t = λ (θ - X_t) dt + σ X_t dB_t,
+        where  λ, θ, σ are d-dimensional vectors and B_t is a d-dimensional Brownian motion with the correlation
+        matrix `correlation`.
+
+        Args:
+            init_val: value of the process at t = 0.
+            correlation: correlation matrix of increments per unit time.
+            lam: mean-reversion coefficient.
+            theta: shift parameter.
+            sigma: scaling parameter.
+            dims: which dimensions of the underlying standard BM to use for simulation. By default all.
+            squeeze: whether to squeeze the output.
+
+        Returns:
+            np.ndarray of shape (size, len(dims), len(t_grid)) with simulated trajectories.
+        """
+        if dims is None:
+            dims = np.arange(self.dim)
+
+        if correlation is None:
+            L = np.eye(len(dims))
+        else:
+            L = self.__get_pseudo_square_root(R=correlation)
+
+        init_val = to_numpy(init_val)
+        lam, theta, sigma = to_numpy(lam), to_numpy(theta), to_numpy(sigma)
+
+        ou_dim = max(len(dims), lam.size, theta.size, sigma.size)
+
+        def f_exp(k, t):
+            return (1 - np.exp(-k * t)) / k
+
+        dt = np.diff(self.t_grid)
+        beta = f_exp(k=lam[None, :] * dt[:, None], t=1) # (len(dt), len(lam))
+        eps_cov = (f_exp(k=lam[None, :, None] + lam[None, None, :], t=dt[:, None, None]) -
+                   np.einsum("ki,kj,k->kij", beta, beta, dt)) # (len(dt), len(lam), len(lam))
+        eps_sqrt = self.__get_pseudo_square_root(R=eps_cov) # (len(dt), len(lam), len(lam))
+
+        dW = np.diff(self.W_traj[:, dims, :], axis=2) # (size, len(dims), len(dt))
+        dY = np.einsum("ki,lik->lik", beta, dW) + \
+             np.einsum("kij,ljk->lik", eps_sqrt, self.rng.normal(size=(self.size, lam.size, dt.size)))
+        dY = np.einsum("ij,ljk->lik", L, dY)
+
+        # TODO: add sampling from stationary law for the initial value.
+        traj = np.zeros((self.size, ou_dim, self.t_grid.size))
+        traj[:, :, 0] = init_val[None, :, None]
+        for k in range(dt.size):
+            traj[:, :, k + 1] = np.exp(-lam[None, :] * dt[k]) * traj[:, :, k] + dY[:, :, k]
+        traj = theta[None, :, None] + sigma[None, :, None] * traj
+        return traj.squeeze() if squeeze else traj
+
     def diffusion_process_euler(
         self,
         dim: int,
         init_val: Union[float, NDArray[float_]] = 0,
         drift: Callable[[Union[float, NDArray[float_]], Union[float, NDArray[float_]]], Union[float, NDArray[float_]]] = lambda x: np.zeros_like(x),
         vol: Callable[[Union[float, NDArray[float_]], Union[float, NDArray[float_]]], Union[float, NDArray[float_]]] = lambda x: np.zeros_like(x),
-        dims: Union[float, NDArray[float_]] = None,
+        dims: Tuple[int] = None,
         squeeze: bool = False,
     ) -> Union[float, NDArray[float_]]:
         """
@@ -184,7 +268,7 @@ class Diffusion:
             init_val: value of the process at t = 0.
             drift: number or vector of size d representing the drift coefficient as a function of (t, x).
             vol: volatility matrix as a function of (t, x).
-            dims: which dimensions of the underlying standard BM to use for simulation. By default all.
+            dims: which dimensions of the underlying standard BM to use for simulation. By default, all.
             squeeze: whether to squeeze the output.
 
         Returns:
@@ -218,7 +302,7 @@ class Diffusion:
     def integral_of_brownian_motion(
         self,
         T: float,
-        dims: Union[float, NDArray[float_]] = None,
+        dims: Tuple[int] = None,
         squeeze: bool = False
     ) -> NDArray[float_]:
         """
