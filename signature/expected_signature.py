@@ -4,10 +4,10 @@ from numpy import float64, complex128
 from typing import Union
 from numba import jit
 
-from signatures.tensor_sequence import TensorSequence
-from signatures.alphabet import Alphabet
-from signatures.stationary_signature import G_inv
-from signatures.ode_integration import ode_stat_pece
+from signature.tensor_sequence import TensorSequence
+from signature.alphabet import Alphabet
+from signature.stationary_signature import G_inv
+from signature.ode_integration import ode_stat_pece
 
 def expected_signature(t: Union[float, NDArray[float64]], trunc: int) -> TensorSequence:
     """

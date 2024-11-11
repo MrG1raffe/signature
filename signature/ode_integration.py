@@ -4,8 +4,8 @@ from numpy import float64
 from numba import jit
 from typing import Callable
 
-from signatures.tensor_sequence import TensorSequence
-from signatures.stationary_signature import G, semi_integrated_scheme, discount_ts
+from signature.tensor_sequence import TensorSequence
+from signature.stationary_signature import G, semi_integrated_scheme, discount_ts
 
 @jit(nopython=True)
 def ode_stat_pece(

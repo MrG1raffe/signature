@@ -6,9 +6,9 @@ from typing import Union, Tuple
 from numba.experimental import jitclass
 import numba as nb
 
-from signatures.alphabet import Alphabet
-from signatures.shuffle import shuffle_product
-from signatures.numba_utility import factorial
+from signature.alphabet import Alphabet
+from signature.shuffle import shuffle_product
+from signature.numba_utility import factorial
 
 spec = [
     ('__alphabet', Alphabet.class_type.instance_type),

@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
    name='signature',
    version='1.0',
-   description='Option pricing models',
+   description='Path signatures and tensor sequences',
    author='MrG1raffe',
    author_email='dimitri.sotnikov@gmail.com',
    packages=find_packages(),

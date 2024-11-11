@@ -4,8 +4,8 @@ from numpy import float64, int64
 from typing import Union
 import matplotlib.pyplot as plt
 
-from signatures.tensor_sequence import TensorSequence
-from signatures.alphabet import Alphabet
+from signature.tensor_sequence import TensorSequence
+from signature.alphabet import Alphabet
 import iisignature
 
 
