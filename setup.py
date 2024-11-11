@@ -12,5 +12,6 @@ setup(
       'typing',
       'matplotlib',
       'numba>=0.58.1',
+      'iisignature'
    ], #external packages as dependencies
 )
