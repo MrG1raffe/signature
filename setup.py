@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-   name='signatures',
+   name='signature',
    version='1.0',
    description='Option pricing models',
    author='MrG1raffe',
