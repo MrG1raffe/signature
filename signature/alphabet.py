@@ -123,4 +123,4 @@ class Alphabet:
         :return: An integer or array of integers representing the length of
                  the word(s) corresponding to the given index/indices.
         """
-        return (np.log2(index + 1) / np.log2(self.__dim)).astype(int64)
+        return (np.log2(index * (self.__dim - 1) + 1) / np.log2(self.__dim)).astype(int64)
