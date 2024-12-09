@@ -4,9 +4,9 @@ from numpy.typing import NDArray
 from numpy import float64, complex128
 from typing import Union
 
-from signature.tensor_sequence import TensorSequence
-from signature.alphabet import Alphabet
-from signature.numba_utility import factorial
+from .tensor_sequence import TensorSequence
+from .alphabet import Alphabet
+from .numba_utility import factorial
 
 def stationary_signature_from_path(
     path: NDArray[float64],

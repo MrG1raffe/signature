@@ -13,30 +13,36 @@ def factorial(x):
 @jit(nopython=True)
 def combinations(pool, r):
     n = len(pool)
-    indices = list(range(r))
-    empty = not(n and (0 < r <= n))
-    l = (factorial(n) // factorial(r) // factorial(n - r))
-    res = np.zeros((l, r), dtype=int64)
+    if r > n or r <= 0:
+        return np.empty((0, r), dtype=np.int64)  # Handle edge cases
+
+    # Calculate the number of combinations
+    l = 1
+    for i in range(r):
+        l *= (n - i)
+        l //= (i + 1)
+
+    # Preallocate result array
+    res = np.empty((l, r), dtype=np.int64)
+    indices = np.arange(r)
     it = 0
 
-    if not empty:
-        result = [pool[i] for i in indices]
-        res[it] = result
-        it = it + 1
+    while True:
+        # Write current combination to result
+        for i in range(r):
+            res[it, i] = pool[indices[i]]
+        it += 1
 
-    while not empty:
+        # Generate the next combination
         i = r - 1
         while i >= 0 and indices[i] == i + n - r:
             i -= 1
-        if i < 0:
-            empty = True
-        else:
-            indices[i] += 1
-            for j in range(i+1, r):
-                indices[j] = indices[j - 1] + 1
 
-            result = [pool[i] for i in indices]
-            res[it] = result
-            it = it + 1
+        if i < 0:
+            break
+
+        indices[i] += 1
+        for j in range(i + 1, r):
+            indices[j] = indices[j - 1] + 1
 
     return res

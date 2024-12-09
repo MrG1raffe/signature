@@ -1,14 +1,15 @@
 from __future__ import annotations
 import numpy as np
+from numba import prange
 from numpy.typing import NDArray
 from numpy import int64, complex128
 from typing import Union, Tuple
 from numba.experimental import jitclass
 import numba as nb
 
-from signature.alphabet import Alphabet
-from signature.shuffle import shuffle_product
-from signature.numba_utility import factorial
+from .alphabet import Alphabet
+from .shuffle import shuffle_product
+from .numba_utility import factorial
 
 spec = [
     ('__alphabet', Alphabet.class_type.instance_type),
@@ -140,9 +141,11 @@ class TensorSequence:
         if self.__array.shape[1] != ts.array.shape[1]:
             raise ValueError("Time grids of sequences should be the same.")
 
+        trunc = max(self.trunc, ts.trunc)
+
         new_indices, new_array = self.add_indices_and_arrays(self.indices, self.array,
                                                              ts.indices, ts.array)
-        return TensorSequence(self.__alphabet, self.__trunc, new_array, new_indices)
+        return TensorSequence(self.__alphabet, trunc, new_array, new_indices)
 
     def __sub__(self, ts: TensorSequence) -> TensorSequence:
         """
@@ -305,13 +308,14 @@ class TensorSequence:
         array = self.__array[indices_mask]
         return TensorSequence(self.__alphabet, self.__trunc, array, new_indices)
 
-    def tensor_prod_word(self, word: str, coefficient: float = 1) -> TensorSequence:
+    def tensor_prod_word(self, word: str, coefficient: float = 1, trunc: int = -1) -> TensorSequence:
         """
         Performs the tensor product of the current TensorSequence with a given word and
         multiply the result by `coefficient`.
 
         :param word: The word to tensor multiply with.
         :param coefficient: The coefficient to multiply the resulting tensor product.
+        :param trunc: truncation level of the resulting TensorSequence instance. By default, self.trunc.
         :return: A new TensorSequence representing the tensor product.
         """
         dim = self.__alphabet.dim
@@ -320,15 +324,18 @@ class TensorSequence:
         new_indices = (dim**length_indices * dim**len(word) - 1) + \
             dim**len(word) * (self.indices - dim**length_indices + 1) + word_dim_base
         array = self.array * coefficient
-        return TensorSequence(self.__alphabet, self.__trunc, array, new_indices)
+        if trunc == -1:
+            trunc = self.trunc
+        return TensorSequence(self.__alphabet, trunc, array, new_indices)
 
-    def tensor_prod_index(self, index: int, coefficient: Union[float, NDArray[complex128]] = 1) -> TensorSequence:
+    def tensor_prod_index(self, index: int, coefficient: Union[float, NDArray[complex128]] = 1, trunc: int = -1) -> TensorSequence:
         """
         Performs the tensor product of the current TensorSequence with a given index and
         multiply the result by `coefficient`.
 
         :param index: The index of word to tensor multiply with.
         :param coefficient: The coefficient to multiply the resulting tensor product.
+        :param trunc: truncation level of the resulting TensorSequence instance. By default, self.trunc.
         :return: A new TensorSequence representing the tensor product.
         """
         dim = self.__alphabet.dim
@@ -338,28 +345,35 @@ class TensorSequence:
         new_indices = (dim**length_indices * dim**other_len - 1) + \
             dim**other_len * (self.indices - dim**length_indices + 1) + other_dim_base
         array = self.array * coefficient
-        return TensorSequence(self.__alphabet, self.__trunc, array, new_indices)
+        if trunc == -1:
+            trunc = self.trunc
+        return TensorSequence(self.__alphabet, trunc, array, new_indices)
 
-    def tensor_prod(self, ts: TensorSequence) -> TensorSequence:
+    def tensor_prod(self, ts: TensorSequence, trunc: int = -1) -> TensorSequence:
         """
         Performs the tensor product of the current TensorSequence with another TensorSequence.
 
         :param ts: The other TensorSequence to tensor multiply with.
+        :param trunc: truncation level of the resulting TensorSequence instance. By default, max(self.trunc, ts.trunc).
         :return: A new TensorSequence representing the tensor product.
         """
+        if trunc == -1:
+            trunc = max(self.trunc, ts.trunc)
+
         other_indices = ts.indices
         other_array = ts.array
         res = self.__zero()
         for i, other_index in enumerate(other_indices):
             coefficient = other_array[i]
-            res.update(res + self.tensor_prod_index(other_index, coefficient))
+            res.update(res + self.tensor_prod_index(other_index, coefficient, trunc))
         return res
 
-    def shuffle_prod(self, ts: TensorSequence) -> TensorSequence:
+    def shuffle_prod(self, ts: TensorSequence, trunc: int = -1) -> TensorSequence:
         """
         Performs the shuffle product of the current TensorSequence with another TensorSequence.
 
         :param ts: The other TensorSequence to shuffle multiply with.
+        :param trunc: truncation level of the resulting TensorSequence instance. By default, max(self.trunc, ts.trunc).
         :return: A new TensorSequence representing the shuffle product.
         """
         res_indices = np.zeros(0)
@@ -368,9 +382,11 @@ class TensorSequence:
         words_self = [self.__alphabet.index_to_int(index) for index in self.indices]
         words_other = [self.__alphabet.index_to_int(index) for index in ts.indices]
 
-        trunc = max(self.trunc, ts.trunc)
+        if trunc == -1:
+            trunc = max(self.trunc, ts.trunc)
 
-        for i_self, word_self in enumerate(words_self):
+        for i_self in prange(len(words_self)):
+            word_self = words_self[i_self]
             for i_other, word_other in enumerate(words_other):
                 if len(str(word_self)) + len(str(word_other)) <= trunc:
                     shuffle_words, counts = shuffle_product(word_self, word_other)
@@ -383,74 +399,95 @@ class TensorSequence:
                                                                          shuffle_indices, shuffle_array)
         return TensorSequence(self.__alphabet, trunc, res_array, res_indices)
 
-    def tensor_pow(self, p: int) -> TensorSequence:
+    def tensor_pow(self, p: int, trunc: int = -1) -> TensorSequence:
         """
         Raises the TensorSequence to a tensor power p.
 
         :param p: The power to which the TensorSequence is raised.
+        :param trunc: truncation level of the resulting TensorSequence instance. By default, self.trunc.
         :return: A new TensorSequence representing the tensor power.
         """
+        if trunc == -1:
+            trunc = self.trunc
+
         if p == 0:
-            return self.__unit()
+            return self.unit(self.alphabet, trunc)
 
         res = self * 1
         # TODO: think about more efficient implementation (with log_2(p) operations)
         for _ in range(p - 1):
-            res.update(res.tensor_prod(self))
+            res.update(res.tensor_prod(self, trunc))
         return res
 
-    def shuffle_pow(self, p: int) -> TensorSequence:
+    def shuffle_pow(self, p: int, trunc: int = -1) -> TensorSequence:
         """
         Raises the TensorSequence to a shuffle power p.
 
         :param p: The power to which the TensorSequence is raised.
+        :param trunc: truncation level of the resulting TensorSequence instance. By default, self.trunc.
         :return: A new TensorSequence representing the shuffle power.
         """
-        if p == 0:
-            return self.__unit()
+        if trunc == -1:
+            trunc = self.trunc
 
-        res = self.__unit()
+        if p == 0:
+            return self.unit(self.alphabet, trunc)
+
+        res = self.unit(self.alphabet, trunc)
         # TODO: think about more efficient implementation (with log_2(p) operations)
         for _ in range(p):
-            res.update(res.shuffle_prod(self))
+            res.update(res.shuffle_prod(self, trunc))
         return res
 
-    def tensor_exp(self, N_trunc: int) -> TensorSequence:
+    def tensor_exp(self, N_trunc: int, trunc: int = -1) -> TensorSequence:
         """
         Computes the tensor exponential of the TensorSequence up to a specified truncation level.
 
         :param N_trunc: The truncation level for the exponential.
+        :param trunc: truncation level of the resulting TensorSequence instance. By default, self.trunc.
         :return: A new TensorSequence representing the tensor exponential.
         """
-        res = self.__unit()
+        if trunc == -1:
+            trunc = self.trunc
+
+        res = self.unit(self.alphabet, trunc)
         for n in range(1, N_trunc):
-            res.update(res + self.tensor_pow(n) / factorial(n))
+            res.update(res + self.tensor_pow(n, trunc) / factorial(n))
         return res
 
-    def shuffle_exp(self, N_trunc: int) -> TensorSequence:
+    def shuffle_exp(self, N_trunc: int, trunc: int = -1) -> TensorSequence:
         """
         Computes the shuffle exponential of the TensorSequence up to a specified truncation level.
 
         :param N_trunc: The truncation level for the exponential.
+        :param trunc: truncation level of the resulting TensorSequence instance. By default, self.trunc.
         :return: A new TensorSequence representing the shuffle exponential.
         """
-        res = self.__unit()
+        if trunc == -1:
+            trunc = self.trunc
+
+        res = self.unit(self.alphabet, trunc)
         for n in range(1, N_trunc):
-            res.update(res + self.shuffle_pow(n) / factorial(n))
+            res.update(res + self.shuffle_pow(n, trunc) / factorial(n))
         return res
 
-    def resolvent(self, N_trunc):
+    def resolvent(self, N_trunc, trunc: int = -1):
         """
         Computes the resolvent of the TensorSequence up to a specified truncation level.
         The resolvent is defined as the series of the TensorSequence's tensor powers.
 
         :param N_trunc: The truncation level for the resolvent.
+        :param trunc: truncation level of the resulting TensorSequence instance. By default, self.trunc.
         :return: A new TensorSequence representing the resolvent.
         :raises ValueError: If the coefficient corresponding to the empty word exceeds or equals 1.
         """
         if np.max(np.abs(self[""])) >= 1:
             raise ValueError("Resolvent cannot be calculated. The tensor sequence l should have |l^∅| < 1.")
-        res = self.__unit()
+
+        if trunc == -1:
+            trunc = self.trunc
+
+        res = self.unit(self.alphabet, trunc)
         for n in range(1, N_trunc):
-            res.update(res + self.tensor_pow(n))
+            res.update(res + self.tensor_pow(n, trunc))
         return res

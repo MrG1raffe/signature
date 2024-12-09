@@ -3,7 +3,7 @@ from numpy import int64
 from numba import jit
 from typing import Tuple
 
-from signature.numba_utility import combinations
+from .numba_utility import combinations
 
 
 @jit(nopython=True)
@@ -31,12 +31,12 @@ def shuffle_product(word_1: int, word_2: int) -> Tuple:
     indices_left = combinations(np.arange(l1 + l2), l1)
     indices_right = combinations(np.arange(l1 + l2), l2)[::-1]
 
-    indices = np.zeros((indices_left.shape[0], l1 + l2))
+    indices = np.zeros((indices_left.shape[0], l1 + l2), dtype=int64)
     indices[:, :l1] = indices_left
     indices[:, l1:] = indices_right
 
-    powers = l1 + l2 - 1 - indices
-    shuffle = np.sum((10 ** powers).astype(int64) * letters.astype(int64), axis=1)
+    powers = 10**(l1 + l2 - 1 - indices)
+    shuffle = np.sum(powers * letters, axis=1)
 
     sorted_shuffle = np.zeros(shuffle.size + 1, dtype=int64)
     sorted_shuffle[:shuffle.size] = np.sort(shuffle)
