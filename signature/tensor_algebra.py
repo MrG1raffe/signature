@@ -1,18 +1,20 @@
 import numpy as np
 from numpy.typing import NDArray
-from numpy import float64, int64
+from numpy import float64, int64, complex128
 from typing import Union
 import matplotlib.pyplot as plt
 
 from .tensor_sequence import TensorSequence
 from .alphabet import Alphabet
+from .shuffle_operator import ShuffleOperator
 import iisignature
 
 
 class TensorAlgebra:
     __alphabet: Alphabet
+    __shuop: ShuffleOperator
 
-    def __init__(self, dim: int):
+    def __init__(self, dim: int, trunc: int = None):
         """
         Initializes an instance of tensor algebra that keeps the alphabet and facilitates the use of JitClass
         TensorSequence.
@@ -22,6 +24,10 @@ class TensorAlgebra:
 
         self.__alphabet = Alphabet(dim=dim)
         self.jit_compile()
+        if trunc is None:
+            self.__shuop = None
+        else:
+            self.__shuop = ShuffleOperator(trunc, self.alphabet)
 
     def jit_compile(self) -> None:
         """
@@ -53,6 +59,15 @@ class TensorAlgebra:
         return self.__alphabet
 
     @property
+    def shuop(self) -> ShuffleOperator:
+        """
+        Returns the shuffle operator.
+
+        :return: An instance of precomputed ShuffleOperator.
+        """
+        return self.__shuop
+
+    @property
     def dim(self) -> int:
         """
         Returns the dimension of the alphabet.
@@ -60,6 +75,9 @@ class TensorAlgebra:
         :return: The number of distinct letters in the alphabet.
         """
         return self.__alphabet.dim
+
+    def update_shuffle_operator(self, trunc):
+        self.__shuop = ShuffleOperator(trunc, self.alphabet)
 
     def from_word(self, word: Union[str, int], trunc: int) -> TensorSequence:
         """
@@ -227,13 +245,3 @@ class TensorAlgebra:
         :return: A new TensorSequence representing the tensor product of ts1 and ts2.
         """
         return ts1.tensor_prod(ts2)
-
-    @staticmethod
-    def shuffle_prod(ts1: TensorSequence, ts2: TensorSequence) -> TensorSequence:
-        """
-        Computes the shuffle product of two TensorSequences.
-        :param ts1: The first TensorSequence.
-        :param ts2: The second TensorSequence.
-        :return: A new TensorSequence representing the shuffle product of ts1 and ts2.
-        """
-        return ts1.shuffle_prod(ts2)

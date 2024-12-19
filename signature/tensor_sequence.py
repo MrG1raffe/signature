@@ -385,10 +385,10 @@ class TensorSequence:
         if trunc == -1:
             trunc = max(self.trunc, ts.trunc)
 
-        for i_self in prange(len(words_self)):
+        for i_self in range(len(words_self)):
             word_self = words_self[i_self]
             for i_other, word_other in enumerate(words_other):
-                if len(str(word_self)) + len(str(word_other)) <= trunc:
+                if len(str(word_self)) * (word_self > 0) + len(str(word_other)) * (word_other > 0) <= trunc:
                     shuffle_words, counts = shuffle_product(word_self, word_other)
                     shuffle_indices = np.array([self.__alphabet.int_to_index(word) for word in shuffle_words], dtype=int64)
                     coefficients = self.array[i_self] * ts.array[i_other]
