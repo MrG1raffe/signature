@@ -47,7 +47,7 @@ class ShuffleOperator:
             shuffle_table[iter:iter+arr_len, :] = arr_to_stack
             iter += arr_len
 
-        self.__shuffle_table = shuffle_table
+        self.__shuffle_table = shuffle_table.T
 
     @property
     def alphabet(self) -> Alphabet:
@@ -76,69 +76,33 @@ class ShuffleOperator:
         """
         return self.__trunc
 
-    def shuffle_prod_timedep(
-        self,
-        ts1: TensorSequence,
-        ts2: TensorSequence,
-        trunc: int = -1,
-    ) -> TensorSequence:
-        """
-        Computes the shuffle product of two TensorSequences.
-        :param ts1: The first TensorSequence.
-        :param ts2: The second TensorSequence.
-        :param trunc: Truncation order of the resulting TensorSequence.
-        :return: A new TensorSequence representing the shuffle product of ts1 and ts2.
-        """
-        if trunc == -1:
-            trunc = min(self.trunc, ts1.trunc + ts2.trunc)
-
-        max_len = self.alphabet.number_of_elements(trunc)
-
-        if self.shuffle_table[-1, 2] < max_len - 1:
-            raise ValueError(f"Cannot compute the shuffle product with given shuffle_table with maximal"
-                             f" word {self.shuffle_table[-1, 2]}. Recompute the shuffle_table or decrease trunc.")
-
-        if self.shuffle_table[-1, 2] > max_len - 1:
-            shuffle_table = self.shuffle_table[self.shuffle_table[:, 2] < max_len]
-        else:
-            shuffle_table = self.shuffle_table
-
-        left_words_idx, right_words_idx, result_idx, counts = shuffle_table.T
-
-        arr_left = np.zeros((max_len,) + ts1.array.shape[1:], dtype=complex128)
-        arr_left[ts1.indices] = ts1.array
-
-        arr_right = np.zeros((max_len,) + ts2.array.shape[1:], dtype=complex128)
-        arr_right[ts2.indices] = ts2.array
-        np.reshape(np.ascontiguousarray(counts), counts.shape)
-        source = arr_left[left_words_idx] * arr_right[right_words_idx] * np.reshape(np.ascontiguousarray(counts),
-                                                                                    (counts.size, 1, 1))
-        result = np.zeros((max_len,) + source.shape[1:], dtype=complex128)
-
-        for i in range(len(result_idx)):
-            result[result_idx[i]] += source[i]
-
-        return TensorSequence(self.alphabet, trunc, result, np.arange(max_len))
-
     def shuffle_prod(
         self,
         ts1: TensorSequence,
         ts2: TensorSequence,
     ):
-        index_left, index_right, index_result, count = self.shuffle_table.T
+        index_left, index_right, index_result, count = self.shuffle_table
 
-        max_len = self.alphabet.number_of_elements(self.trunc)
-        linear_left = np.zeros((max_len,), dtype=complex128)
-        linear_left[ts1.indices] = ts1.array[:, 0, 0]
-
-        linear_right = np.zeros((max_len,), dtype=complex128)
-        linear_right[ts2.indices] = ts2.array[:, 0, 0]
-
-        source = count * linear_left[index_left] * linear_right[index_right]
-        linear_result = np.zeros(shape=index_result[-1] + 1, dtype=complex128)
+        source = count * ts1.array[index_left, 0, 0] * ts2.array[index_right, 0, 0]
+        linear_result = np.zeros(index_result[-1] + 1, dtype=complex128)
         for i in range(len(index_result)):
             linear_result[index_result[i]] = linear_result[index_result[i]] + source[i]
-        return TensorSequence(self.alphabet, self.trunc, linear_result, np.arange(max_len))
+        return TensorSequence(self.alphabet, self.trunc, linear_result)
+
+    def shuffle_prod_2d(
+        self,
+        ts1: TensorSequence,
+        ts2: TensorSequence
+    ):
+        index_left, index_right, index_result, count = self.shuffle_table
+        left = ts1.array[:, :, 0][index_left]
+        right = ts2.array[:, :, 0][index_right]
+        source = np.reshape(np.ascontiguousarray(count), (count.size, 1)) * left * right
+        source = source.T
+        linear_result = np.zeros(shape=source.shape[:1] + (index_result[-1] + 1,), dtype=complex128)
+        for i in range(len(index_result)):
+            linear_result[:, index_result[i]] += source[:, i]
+        return TensorSequence(self.alphabet, self.trunc, linear_result.T)
 
     def shuffle_pow(self, ts: TensorSequence, p: int) -> TensorSequence:
         """

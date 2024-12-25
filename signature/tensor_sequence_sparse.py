@@ -1,5 +1,6 @@
 from __future__ import annotations
 import numpy as np
+from numba import prange
 from numpy.typing import NDArray
 from numpy import int64, complex128
 from typing import Union, Tuple
@@ -14,6 +15,7 @@ spec = [
     ('__alphabet', Alphabet.class_type.instance_type),
     ('__trunc', nb.int64),
     ('__array', nb.complex128[:, :, :]),
+    ('__indices', nb.int64[:]),
 ]
 
 
@@ -24,6 +26,7 @@ class TensorSequence:
         alphabet: Alphabet,
         trunc: int,
         array: NDArray[complex128],
+        indices: NDArray[int64],
     ):
         """
         Initializes a TensorSequence object, which represents a collection of coefficients indexed
@@ -31,7 +34,11 @@ class TensorSequence:
 
         :param alphabet: An Alphabet object that defines the dimension and convertion functions.
         :param trunc: The truncation level, i.e., the maximum length of words considered in this TensorSequence.
-        :param array: A one-dimensional numpy array of tensor coefficients corresponding to the indices.
+        :param array: Optional. A one-dimensional numpy array of tensor coefficients corresponding to the indices.
+        :param indices: Optional. A numpy array of integer indices corresponding to words in the alphabet. For
+            example, in the alphabet ("1", "2"), the word index is the index of word in the array
+            ["Ø", "1", "2", "11", "12", "21", "22", "111", "112", "121", ...].
+        # :param word_dict: Optional. A dictionary mapping words (as strings) to tensor coefficients.
         """
         self.__alphabet = alphabet
         self.__trunc = trunc
@@ -44,20 +51,14 @@ class TensorSequence:
             reshaped_array = array.astype(complex128)
         else:
             raise ValueError("Array can be at most 3-dimensional.")
+        if len(indices):
+            mask = indices < alphabet.number_of_elements(trunc)
+            indices, reshaped_array = indices[mask], reshaped_array[mask]
 
-        n_elements = alphabet.number_of_elements(trunc)
+        self.__indices = indices.astype(int64)
+        self.__array = reshaped_array.astype(complex128)
 
-        self.__array = np.zeros((n_elements,) + reshaped_array.shape[1:], dtype=complex128)
-        self.__array[:min(n_elements, reshaped_array.shape[0])] = reshaped_array[:min(n_elements, reshaped_array.shape[0])]
-
-    def update_trunc(self, new_trunc):
-        if new_trunc != self.trunc:
-            self.__trunc = new_trunc
-            n_elements = self.alphabet.number_of_elements(new_trunc)
-
-            new_array = np.zeros((n_elements,) + self.array.shape[1:], dtype=complex128)
-            new_array[:min(n_elements, self.array.shape[0])] = self.__array[:min(n_elements, self.array.shape[0])]
-            self.__array = new_array
+        self.remove_zeros()
 
     def __getitem__(self, key: Union[str, int]) -> Union[complex128, NDArray[complex128], TensorSequence]:
         """
@@ -70,10 +71,15 @@ class TensorSequence:
         """
         if isinstance(key, str):
             word_index = self.__alphabet.word_to_index(key)
-            return self.__array[word_index]
+
+            if word_index not in self.indices:
+                return np.zeros((self.array.shape[1:]), dtype=complex128)
+
+            array_index = np.searchsorted(self.indices, word_index)
+            return self.__array[array_index]
         else:
             indexed_arr = np.ascontiguousarray(self.array[:, key, :])
-            return TensorSequence(self.alphabet, self.trunc, indexed_arr)
+            return TensorSequence(self.alphabet, self.trunc, indexed_arr, self.indices)
 
     def __rmul__(self, c: Union[float, complex, NDArray[complex128]]) -> TensorSequence:
         """
@@ -83,7 +89,7 @@ class TensorSequence:
         :return: A new TensorSequence that is the result of the multiplication.
         """
         new_array = self.__array * c
-        return TensorSequence(self.__alphabet, self.__trunc, new_array)
+        return TensorSequence(self.__alphabet, self.__trunc, new_array, self.__indices)
 
     def __mul__(self, c: Union[float, complex, NDArray[complex128]]) -> TensorSequence:
         """
@@ -104,6 +110,23 @@ class TensorSequence:
         """
         return self * (1 / c)
 
+    @staticmethod
+    def add_indices_and_arrays(indices_1: NDArray[complex128], array_1: NDArray[complex128],
+                               indices_2: NDArray[complex128], array_2: NDArray[complex128]) -> Tuple[NDArray[complex128], NDArray[complex128]]:
+        concatenated_indices = np.zeros(indices_1.size + indices_2.size)
+        concatenated_indices[:indices_1.size] = indices_1
+        concatenated_indices[indices_1.size:] = indices_2
+
+        new_indices = np.unique(concatenated_indices)
+
+        indices_first = np.searchsorted(new_indices, indices_1)
+        indices_second = np.searchsorted(new_indices, indices_2)
+
+        new_array = np.zeros((len(new_indices),) + array_1.shape[1:], dtype=complex128)
+        new_array[indices_first] = new_array[indices_first] + array_1
+        new_array[indices_second] = new_array[indices_second] + array_2
+        return new_indices, new_array
+
     def __add__(self, ts: TensorSequence) -> TensorSequence:
         """
         Adds another TensorSequence to the current one.
@@ -119,16 +142,10 @@ class TensorSequence:
             raise ValueError("Time grids of sequences should be the same.")
 
         trunc = max(self.trunc, ts.trunc)
-        new_len = self.alphabet.number_of_elements(trunc)
 
-        array_1 = np.zeros((new_len,) + self.array.shape[1:], dtype=complex128)
-        array_1[:min(new_len, self.array.shape[0])] = self.__array[:min(new_len, self.array.shape[0])]
-
-        array_2 = np.zeros((new_len,) + ts.array.shape[1:], dtype=complex128)
-        array_2[:min(new_len, ts.array.shape[0])] = ts.__array[:min(new_len, ts.array.shape[0])]
-
-        new_array = array_1 + array_2
-        return TensorSequence(self.__alphabet, trunc, new_array)
+        new_indices, new_array = self.add_indices_and_arrays(self.indices, self.array,
+                                                             ts.indices, ts.array)
+        return TensorSequence(self.__alphabet, trunc, new_array, new_indices)
 
     def __sub__(self, ts: TensorSequence) -> TensorSequence:
         """
@@ -146,8 +163,10 @@ class TensorSequence:
         :param ts: The TensorSequence with which to compute the inner product.
         :return: The inner product as a scalar.
         """
-        n_min = min(len(self), len(ts))
-        return (self.array[:n_min] * ts.array[:n_min]).sum(axis=0)
+        intersect_idx = np.intersect1d(self.__indices, ts.indices)
+        sub_index_self = np.searchsorted(self.__indices, intersect_idx)
+        sub_index_other = np.searchsorted(ts.indices, intersect_idx)
+        return (self.array[sub_index_self] * ts.array[sub_index_other]).sum(axis=0)
 
     def __len__(self) -> int:
         """
@@ -155,7 +174,7 @@ class TensorSequence:
 
         :return: The number of non-zero coefficients.
         """
-        return self.array.shape[0]
+        return len(self.__indices)
 
     def __bool__(self) -> bool:
         """
@@ -163,25 +182,25 @@ class TensorSequence:
 
         :return: True if the TensorSequence has non-zero coefficients, False otherwise.
         """
-        return not np.allclose(self.array, 0)
+        return bool(len(self))
 
-    def zero_like(self) -> TensorSequence:
+    def __zero(self) -> TensorSequence:
         """
         Creates an instance of TensorSequence with no indices and the same sizes of other axis.
 
         :return: A new zero TensorSequence.
         """
         self_shape = (0,) + self.array.shape[1:]
-        return TensorSequence(self.__alphabet, self.__trunc, np.zeros(self_shape))
+        return TensorSequence(self.__alphabet, self.__trunc, np.zeros(self_shape), np.zeros(0))
 
-    def unit_like(self) -> TensorSequence:
+    def __unit(self) -> TensorSequence:
         """
         Creates an instance of TensorSequence with index 1 corresponding to the word Ø.
 
         :return: A unit element as TensorSequence.
         """
         self_shape = (1,) + self.array.shape[1:]
-        return TensorSequence(self.__alphabet, self.__trunc, np.ones(self_shape))
+        return TensorSequence(self.__alphabet, self.__trunc, np.ones(self_shape), np.zeros(1))
 
     @staticmethod
     def zero(alphabet, trunc) -> TensorSequence:
@@ -194,7 +213,7 @@ class TensorSequence:
         :return: A new zero TensorSequence.
         """
         self_shape = (0, 1, 1)
-        return TensorSequence(alphabet, trunc, np.zeros(self_shape))
+        return TensorSequence(alphabet, trunc, np.zeros(self_shape), np.zeros(0))
 
     @staticmethod
     def unit(alphabet, trunc) -> TensorSequence:
@@ -207,7 +226,16 @@ class TensorSequence:
         :return: A unit element as TensorSequence.
         """
         self_shape = (1, 1, 1)
-        return TensorSequence(alphabet, trunc, np.ones(self_shape))
+        return TensorSequence(alphabet, trunc, np.ones(self_shape), np.zeros(1))
+
+    def remove_zeros(self) -> None:
+        """
+        Removes elements of indices and array where the coefficients are equal to zero.
+        """
+        ATOL = 1e-12
+        idx_to_keep = (np.abs(self.__array) > ATOL).sum(axis=2).sum(axis=1) > 0
+        self.__indices = self.__indices[idx_to_keep]
+        self.__array = self.__array[idx_to_keep]
 
     @property
     def alphabet(self) -> Alphabet:
@@ -236,6 +264,15 @@ class TensorSequence:
         """
         return self.__trunc
 
+    @property
+    def indices(self) -> NDArray[int64]:
+        """
+        Returns the array of indices of words corresponding to non-zero coefficients of TensorSequence.
+
+        :return: A numpy array of indices.
+        """
+        return self.__indices
+
     def update(self, ts: TensorSequence) -> None:
         """
         Updates the attributes of the instance copying the attributes of ts.
@@ -245,6 +282,15 @@ class TensorSequence:
         self.__alphabet = ts.alphabet
         self.__trunc = ts.trunc
         self.__array = ts.array
+        self.__indices = ts.indices
+
+    def norm_inf(self) -> NDArray[complex128]:
+        """
+        Computes the infinity norm (maximum absolute value) of the TensorSequence.
+
+        :return: The infinity norm as a scalar or numpy array.
+        """
+        return np.abs(self.__array).sum(axis=0)
 
     def proj(self, word: str) -> TensorSequence:
         """
@@ -253,18 +299,14 @@ class TensorSequence:
         :param word: The to calculate the projection.
         :return: A new TensorSequence representing the projection.
         """
-        indices = np.arange(len(self))
-
         dim = self.__alphabet.dim
         word_index = self.__alphabet.word_to_index(word)
-        indices_mask = (((indices - word_index) % dim**len(word)) == 0) & (indices >= word_index)
-        indices_to_keep = indices[indices_mask]
+        indices_mask = (((self.indices - word_index) % dim**len(word)) == 0) & (self.indices >= word_index)
+        indices_to_keep = self.indices[indices_mask]
         length_arr = self.__alphabet.index_to_length(indices_to_keep)
         new_indices = (indices_to_keep - dim**length_arr + 1) // dim**(len(word)) + dim**(length_arr - len(word)) - 1
-
-        array = np.zeros_like(self.array, dtype=complex128)
-        array[new_indices] = self.__array[indices_mask]
-        return TensorSequence(self.__alphabet, self.__trunc, array)
+        array = self.__array[indices_mask]
+        return TensorSequence(self.__alphabet, self.__trunc, array, new_indices)
 
     def tensor_prod_word(self, word: str, coefficient: float = 1, trunc: int = -1) -> TensorSequence:
         """
@@ -276,19 +318,15 @@ class TensorSequence:
         :param trunc: truncation level of the resulting TensorSequence instance. By default, self.trunc.
         :return: A new TensorSequence representing the tensor product.
         """
-        indices = np.arange(len(self))
-
         dim = self.__alphabet.dim
         word_dim_base = self.__alphabet.word_to_base_dim_number(word)
-        length_indices = self.__alphabet.index_to_length(indices)
+        length_indices = self.__alphabet.index_to_length(self.indices)
         new_indices = (dim**length_indices * dim**len(word) - 1) + \
-            dim**len(word) * (indices - dim**length_indices + 1) + word_dim_base
-
-        array = np.zeros_like(self.array, dtype=complex128)
-        array[new_indices[new_indices < len(self)]] = self.array[new_indices < len(self)] * coefficient
+            dim**len(word) * (self.indices - dim**length_indices + 1) + word_dim_base
+        array = self.array * coefficient
         if trunc == -1:
             trunc = self.trunc
-        return TensorSequence(self.__alphabet, trunc, array)
+        return TensorSequence(self.__alphabet, trunc, array, new_indices)
 
     def tensor_prod_index(self, index: int, coefficient: Union[float, NDArray[complex128]] = 1, trunc: int = -1) -> TensorSequence:
         """
@@ -300,21 +338,16 @@ class TensorSequence:
         :param trunc: truncation level of the resulting TensorSequence instance. By default, self.trunc.
         :return: A new TensorSequence representing the tensor product.
         """
-        indices = np.arange(len(self))
-
         dim = self.__alphabet.dim
         other_len = self.__alphabet.index_to_length(np.array([index], dtype=int64))
         other_dim_base = index - dim**other_len + 1
-        length_indices = self.__alphabet.index_to_length(indices)
+        length_indices = self.__alphabet.index_to_length(self.indices)
         new_indices = (dim**length_indices * dim**other_len - 1) + \
-            dim**other_len * (indices - dim**length_indices + 1) + other_dim_base
-
-        array = np.zeros_like(self.array, dtype=complex128)
-        array[new_indices[new_indices < len(self)]] = self.array[new_indices < len(self)] * coefficient
-
+            dim**other_len * (self.indices - dim**length_indices + 1) + other_dim_base
+        array = self.array * coefficient
         if trunc == -1:
             trunc = self.trunc
-        return TensorSequence(self.__alphabet, trunc, array)
+        return TensorSequence(self.__alphabet, trunc, array, new_indices)
 
     def tensor_prod(self, ts: TensorSequence, trunc: int = -1) -> TensorSequence:
         """
@@ -327,12 +360,12 @@ class TensorSequence:
         if trunc == -1:
             trunc = max(self.trunc, ts.trunc)
 
+        other_indices = ts.indices
         other_array = ts.array
-        res = self.zero_like()
-        for i in range(len(ts)):
+        res = self.__zero()
+        for i, other_index in enumerate(other_indices):
             coefficient = other_array[i]
-            if not np.allclose(coefficient, 0):
-                res.update(res + self.tensor_prod_index(i, coefficient, trunc))
+            res.update(res + self.tensor_prod_index(other_index, coefficient, trunc))
         return res
 
     def shuffle_prod(self, ts: TensorSequence, trunc: int = -1) -> TensorSequence:
@@ -343,25 +376,28 @@ class TensorSequence:
         :param trunc: truncation level of the resulting TensorSequence instance. By default, max(self.trunc, ts.trunc).
         :return: A new TensorSequence representing the shuffle product.
         """
+        res_indices = np.zeros(0)
+        res_array = np.zeros((0,) + self.array.shape[1:], dtype=complex128)
+
+        words_self = [self.__alphabet.index_to_int(index) for index in self.indices]
+        words_other = [self.__alphabet.index_to_int(index) for index in ts.indices]
+
         if trunc == -1:
             trunc = max(self.trunc, ts.trunc)
 
-        res_array = np.zeros((self.alphabet.number_of_elements(trunc),) + self.array.shape[1:], dtype=complex128)
+        for i_self in range(len(words_self)):
+            word_self = words_self[i_self]
+            for i_other, word_other in enumerate(words_other):
+                if len(str(word_self)) * (word_self > 0) + len(str(word_other)) * (word_other > 0) <= trunc:
+                    shuffle_words, counts = shuffle_product(word_self, word_other)
+                    shuffle_indices = np.array([self.__alphabet.int_to_index(word) for word in shuffle_words], dtype=int64)
+                    coefficients = self.array[i_self] * ts.array[i_other]
+                    shuffle_array = (np.reshape(counts, (-1, 1, 1)) *
+                                     np.reshape(coefficients, (1,) + coefficients.shape)).astype(complex128)
 
-        for i_self in range(len(self)):
-            for i_other in range(len(ts)):
-                if not np.allclose(self.array[i_self] * ts.array[i_other], 0):
-                    word_self = self.__alphabet.index_to_int(i_self)
-                    word_other = self.__alphabet.index_to_int(i_other)
-                    if len(str(word_self)) * (word_self > 0) + len(str(word_other)) * (word_other > 0) <= trunc:
-                        shuffle_words, counts = shuffle_product(word_self, word_other)
-                        shuffle_indices = np.array([self.__alphabet.int_to_index(word) for word in shuffle_words], dtype=int64)
-                        coefficients = self.array[i_self] * ts.array[i_other]
-                        shuffle_array = (np.reshape(counts, (-1, 1, 1)) *
-                                         np.reshape(coefficients, (1,) + coefficients.shape)).astype(complex128)
-                        res_array[shuffle_indices] += shuffle_array
-
-        return TensorSequence(self.__alphabet, trunc, res_array)
+                    res_indices, res_array = self.add_indices_and_arrays(res_indices, res_array,
+                                                                         shuffle_indices, shuffle_array)
+        return TensorSequence(self.__alphabet, trunc, res_array, res_indices)
 
     def tensor_pow(self, p: int, trunc: int = -1) -> TensorSequence:
         """

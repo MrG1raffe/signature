@@ -43,8 +43,8 @@ class TensorAlgebra:
         self.from_array(trunc=2, array=np.ones((15, 10, 10)))
         empty = self.from_dict({}, trunc=1)
         (ts[""], 2 * ts, ts * 2, ts / 2, ts + ts2, ts - ts, ts @ ts)
-        (len(ts), bool(ts), ts.array, ts.trunc)
-        (ts.proj(""), ts.tensor_prod_word("1"), ts.tensor_prod_index(1),
+        (len(ts), bool(ts), ts.array, ts.trunc, ts.indices)
+        (ts.norm_inf(), ts.proj(""), ts.tensor_prod_word("1"), ts.tensor_prod_index(1),
          ts.tensor_prod(ts), ts.shuffle_prod(ts), ts.tensor_pow(1), ts.shuffle_pow(1),
          ts.tensor_exp(1), ts.shuffle_exp(1), (ts / 2).resolvent(1))
         print("Compilation finished.")
@@ -87,11 +87,10 @@ class TensorAlgebra:
         :param trunc: The truncation level, i.e., the maximum length of words considered in this TensorSequence.
         :return: A TensorSequence constructed from the provided word and truncation level.
         """
-        index = self.__alphabet.word_to_index(str(word))
-        array = np.zeros(self.alphabet.number_of_elements(trunc))
-        if index < len(array):
-            array[index] = 1
-        return TensorSequence(self.alphabet, trunc, array)
+        indices = np.array([self.__alphabet.word_to_index(str(word))])
+        array = np.ones(1)
+
+        return TensorSequence(self.alphabet, trunc, array, indices)
 
     def from_dict(self, word_dict: dict, trunc: int) -> TensorSequence:
         """
@@ -102,20 +101,18 @@ class TensorAlgebra:
         :return: A TensorSequence constructed from the provided word dictionary and truncation level.
         """
         if not word_dict:
-            return TensorSequence.zero(self.alphabet, trunc)
+            indices = np.zeros((0,), dtype=int64)
+            array = np.zeros((0, 1, 1))
         else:
             # sort the arrays with respect to indices
-            indices, values = zip(*sorted(zip(
+            indices, array = zip(*sorted(zip(
                 [self.__alphabet.word_to_index(str(word)) for word in word_dict.keys()],
                 list(word_dict.values())
             )))
             indices = np.array(indices, dtype=int64)
-            values = np.array(values)
-            n_elem = self.alphabet.number_of_elements(trunc)
-            array = np.zeros((n_elem,) + values.shape[1:])
-            array[indices[indices < n_elem]] = values[indices < n_elem]
+            array = np.array(array)
 
-        return TensorSequence(self.alphabet, trunc, array)
+        return TensorSequence(self.alphabet, trunc, array, indices)
 
     def to_dict(self, ts: TensorSequence) -> dict:
         """
@@ -123,13 +120,13 @@ class TensorAlgebra:
 
         :return: A dictionary where keys are words and values are tensor coefficients.
         """
-        keys = [self.__alphabet.index_to_word(index) for index in range(len(ts))]
+        keys = [self.__alphabet.index_to_word(index) for index in ts.indices]
         values = ts.array.squeeze()
         if np.all(np.isclose(values.imag, 0)):
             values = values.real
         return dict(zip(keys, values))
 
-    def from_array(self, trunc: int, array: NDArray) -> TensorSequence:
+    def from_array(self, trunc: int, array: NDArray, indices: NDArray = None) -> TensorSequence:
         """
         Creates a TensorSequence from a given array and (optionally) indices. If indices are not given, takes the
         indices of the first elements of the tensor algebra.
@@ -140,8 +137,10 @@ class TensorAlgebra:
         :return: A TensorSequence constructed from the provided array and indices.
         """
         array = np.array(array, dtype=float64)
+        if indices is None:
+            indices = np.arange(array.shape[0])
 
-        return TensorSequence(self.alphabet, trunc, array)
+        return TensorSequence(self.alphabet, trunc, array, indices)
 
     def to_str(self, ts: TensorSequence) -> str:
         """
@@ -151,16 +150,13 @@ class TensorAlgebra:
         :return: string representation of `ts`.
         """
         res = ""
-        is_first = True
-        for i in range(len(ts)):
+        for i, index in enumerate(ts.indices):
+            if i > 0:
+                res += " + "
             coefficient = ts.array[i].squeeze()
-            if not np.allclose(coefficient, 0):
-                if not is_first:
-                    res += " + "
-                if np.all(np.isclose(coefficient.imag, 0)):
-                    coefficient = coefficient.real
-                res += str(coefficient) + "*" + self.__alphabet.index_to_word(i)
-                is_first = False
+            if np.all(np.isclose(coefficient.imag, 0)):
+                coefficient = coefficient.real
+            res += str(coefficient) + "*" + self.__alphabet.index_to_word(index)
         return res
 
     def print(self, ts: TensorSequence) -> None:
@@ -222,10 +218,13 @@ class TensorAlgebra:
             trunc = ts.trunc
 
         n_coefficients = 2**(trunc + 1) - 1
-
-        indices = np.arange(n_coefficients)
-        coefficients = np.zeros(n_coefficients)
-        coefficients[:min(n_coefficients, len(ts))] = ts.array[:min(n_coefficients, len(ts))].squeeze().real
+        if nonzero:
+            indices = ts.indices[ts.indices < n_coefficients]
+            coefficients = ts.array[ts.indices < n_coefficients].squeeze().real
+        else:
+            indices = np.arange(n_coefficients)
+            coefficients = np.zeros(n_coefficients)
+            coefficients[ts.indices[ts.indices < n_coefficients]] = ts.array[ts.indices < n_coefficients].squeeze().real
 
         if ax is None:
             fig, ax = plt.subplots()
