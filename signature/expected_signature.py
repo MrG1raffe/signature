@@ -9,6 +9,7 @@ from .alphabet import Alphabet
 from .stationary_signature import G_inv
 from .ode_integration import ode_stat_pece
 
+
 def expected_signature(t: Union[float, NDArray[float64]], trunc: int) -> TensorSequence:
     """
     Calculates the expected signature of X_t = (t, W_t).
@@ -18,10 +19,11 @@ def expected_signature(t: Union[float, NDArray[float64]], trunc: int) -> TensorS
 
     :return: expected signature evaluated at t as a TensorSequence instance.
     """
-    array = np.reshape([1, 0.5], (2, 1, 1)) * np.reshape(t, (1, -1, 1))
+    alphabet = Alphabet(2)
     # w = (1 + 0.5 * 22) * t
-    w = TensorSequence(Alphabet(2), trunc, array.astype(complex128), np.array([1, 6]))
+    w = get_1_22(alphabet, trunc) * np.reshape(t, (1, -1, 1))
     return w.tensor_exp(trunc)
+
 
 def expected_stationary_signature(trunc: int, lam: int, t: float = None, n_points: int = 100) -> TensorSequence:
     """
@@ -36,22 +38,31 @@ def expected_stationary_signature(trunc: int, lam: int, t: float = None, n_point
     :return: expected signature as a TensorSequence instance.
     """
     # w = 1 + 0.5 * 22
-    w = TensorSequence(Alphabet(2), trunc, np.array([1, 0.5], dtype=complex128), np.array([1, 6]))
+    alphabet = Alphabet(2)
+    w = get_1_22(alphabet, trunc)
 
     if t is None:
-        res = TensorSequence(Alphabet(2), trunc, np.ones((1, 1, 1), dtype=complex128), np.array([0]))
-        v = TensorSequence(Alphabet(2), trunc, np.ones((1, 1, 1), dtype=complex128), np.array([0]))
+        res = TensorSequence.unit(alphabet, trunc)
+        v = TensorSequence.unit(alphabet, trunc)
         for _ in range(trunc):
             v.update(G_inv(v.tensor_prod(w)) / lam)
             res.update(res + v)
         return res
     else:
         t_grid = np.linspace(0, t, n_points)
-        return ode_stat_pece(func=__expected_sig_ode_func, t_grid=t_grid, u=TensorSequence(w.alphabet, trunc, np.ones((1, 1, 1)), np.zeros(1)), lam=lam)
+        return ode_stat_pece(func=__expected_sig_ode_func, t_grid=t_grid, u=TensorSequence.unit(alphabet, trunc), lam=lam)
+
+
+@jit(nopython=True)
+def get_1_22(alphabet: Alphabet, trunc: int):
+    array = np.zeros(alphabet.number_of_elements(trunc))
+    array[1] = 1
+    array[6] = 0.5
+    return TensorSequence(alphabet, trunc, array)
 
 
 @jit(nopython=True)
 def __expected_sig_ode_func(l: TensorSequence):
     # w = 1 + 0.5 * 22
-    w = TensorSequence(Alphabet(2), 2, np.array([1, 0.5], dtype=complex128), np.array([1, 6]))
+    w = get_1_22(Alphabet(2), l.trunc)
     return l.tensor_prod(w)

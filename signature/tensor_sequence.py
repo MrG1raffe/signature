@@ -397,7 +397,8 @@ class TensorSequence:
         if p == 0:
             return self.unit(self.alphabet, trunc)
 
-        res = self.unit(self.alphabet, trunc)
+        res = self.unit_like()
+        res.update_trunc(trunc)
         # TODO: think about more efficient implementation (with log_2(p) operations)
         for _ in range(p):
             res.update(res.shuffle_prod(self, trunc))
@@ -414,7 +415,9 @@ class TensorSequence:
         if trunc == -1:
             trunc = self.trunc
 
-        res = self.unit(self.alphabet, trunc)
+        res = self.unit_like()
+        res.update_trunc(trunc)
+
         for n in range(1, N_trunc):
             res.update(res + self.tensor_pow(n, trunc) / factorial(n))
         return res
@@ -430,7 +433,9 @@ class TensorSequence:
         if trunc == -1:
             trunc = self.trunc
 
-        res = self.unit(self.alphabet, trunc)
+        res = self.unit_like()
+        res.update_trunc(trunc)
+
         for n in range(1, N_trunc):
             res.update(res + self.shuffle_pow(n, trunc) / factorial(n))
         return res
@@ -451,7 +456,9 @@ class TensorSequence:
         if trunc == -1:
             trunc = self.trunc
 
-        res = self.unit(self.alphabet, trunc)
+        res = self.unit_like()
+        res.update_trunc(trunc)
+
         for n in range(1, N_trunc):
             res.update(res + self.tensor_pow(n, trunc))
         return res

@@ -12,7 +12,8 @@ def stationary_signature_from_path(
     path: NDArray[float64],
     trunc: int,
     t_grid: NDArray[float64],
-    lam: float
+    lam: float,
+    return_negative: bool = False
 ) -> TensorSequence:
     """
     Computes the stationary signature with coefficient lam corresponding to a given d-dimensional path on the
@@ -49,7 +50,7 @@ def stationary_signature_from_path(
         idx_start = alphabet.number_of_elements(n - 1)
         array_steps[idx_start:idx_start + dim ** n] = tp_n.reshape((path_inc.shape[0], -1)).T * __h(dt=dt, n=n, lam=lam)
 
-    return __sum_steps_stat(array_steps, trunc, alphabet, t_grid, lam)
+    return __sum_steps_stat(array_steps, trunc, alphabet, t_grid, lam, return_negative)
 
 @jit(nopython=True)
 def __h(dt: Union[float, NDArray[float64]], n: int, lam: float):
@@ -64,7 +65,8 @@ def __sum_steps_stat(
     trunc: int,
     alphabet: Alphabet,
     t_grid: NDArray[float64],
-    lam: float
+    lam: float,
+    return_negative: bool
 ) -> TensorSequence:
     """
     Transforms the signature bb{X}_{t_k, t_{k + 1}} of linear paths into the path signature bb{X}_{t_{k + 1}}
@@ -72,24 +74,34 @@ def __sum_steps_stat(
     """
     dt = t_grid[1:] - t_grid[:-1]
     n_indices = alphabet.number_of_elements(trunc)
-    indices = np.arange(array_steps.shape[0])
-    ts_steps = [TensorSequence(alphabet, trunc,
-                               np.ascontiguousarray(array_steps[:, i]).reshape((n_indices, 1, 1)), indices)
+    ts_steps = [TensorSequence(alphabet, trunc, np.ones(1))] + \
+               [TensorSequence(alphabet, trunc,
+                               np.ascontiguousarray(array_steps[:, i]).reshape((n_indices, 1, 1)))
                 for i in range(array_steps.shape[1])]
     for i in range(len(ts_steps) - 1):
         # Stationary Chan's identity
-        ts_steps[i + 1].update(discount_ts(ts=ts_steps[i], dt=dt[i + 1], lam=lam).tensor_prod(ts_steps[i + 1]))
+        ts_steps[i + 1].update(discount_ts(ts=ts_steps[i], dt=dt[i], lam=lam).tensor_prod(ts_steps[i + 1]))
 
-    n_pos_points = np.sum(t_grid >= 0)
-    array_res = np.zeros((n_indices, n_pos_points), dtype=complex128)
+    if return_negative:
+        n_points = len(t_grid)
+    else:
+        n_points = np.sum(t_grid >= 0)
+    array_res = np.zeros((n_indices, n_points), dtype=complex128)
 
-    for i, ts in enumerate(ts_steps[-n_pos_points:]):
+    for i, ts in enumerate(ts_steps[-n_points:]):
         # Creating an array corresponding to the positive time points.
-        array_res[ts.indices, i] = ts.array[:, 0, 0]
+        array_res[:, i] = ts.array[:, 0, 0]
 
-    return TensorSequence(alphabet, trunc, array_res, indices)
+    return TensorSequence(alphabet, trunc, array_res)
+
 
 ### Operators ###
+
+
+@jit(nopython=True)
+def get_lengths_array(alphabet: Alphabet, trunc: int) -> NDArray[float64]:
+    return alphabet.index_to_length(np.arange(alphabet.number_of_elements(trunc)))
+
 
 @jit(nopython=True)
 def G(ts: TensorSequence) -> TensorSequence:
@@ -102,8 +114,8 @@ def G(ts: TensorSequence) -> TensorSequence:
     """
 
     return TensorSequence(ts.alphabet, ts.trunc,
-                          ts.array * np.reshape(ts.alphabet.index_to_length(ts.indices), ts.array.shape),
-                          ts.indices)
+                          ts.array * np.reshape(get_lengths_array(ts.alphabet, ts.trunc), (len(ts), 1, 1)))
+
 
 @jit(nopython=True)
 def G_inv(ts: TensorSequence) -> TensorSequence:
@@ -114,10 +126,10 @@ def G_inv(ts: TensorSequence) -> TensorSequence:
 
     :return: G^{-1}(ts) as a new instance of TensorSequence.
     """
-
+    lengths = get_lengths_array(ts.alphabet, ts.trunc)
     return TensorSequence(ts.alphabet, ts.trunc,
-                          ts.array * np.where(ts.indices != 0, 1 /ts.alphabet.index_to_length(ts.indices), 0).reshape(ts.array.shape),
-                          ts.indices)
+                          ts.array * np.where(lengths != 0, 1 / lengths, 0).reshape((len(ts), 1, 1)))
+
 
 @jit(nopython=True)
 def discount_ts(ts: TensorSequence, dt: float, lam: float) -> TensorSequence:
@@ -132,8 +144,9 @@ def discount_ts(ts: TensorSequence, dt: float, lam: float) -> TensorSequence:
     :return: Discounted tensor sequence.
     """
     return TensorSequence(ts.alphabet, ts.trunc,
-                          ts.array * np.reshape(np.exp(-ts.alphabet.index_to_length(ts.indices) * lam * dt), ts.array.shape),
-                          ts.indices)
+                          ts.array * np.reshape(np.exp(-get_lengths_array(ts.alphabet, ts.trunc) * lam * dt),
+                                                (len(ts), 1, 1)))
+
 
 @jit(nopython=True)
 def semi_integrated_scheme(ts: TensorSequence, dt: float, lam: float) -> TensorSequence:
@@ -148,12 +161,13 @@ def semi_integrated_scheme(ts: TensorSequence, dt: float, lam: float) -> TensorS
 
     :return: A result of application of the operator to ts.
     """
+    lengths_arr = get_lengths_array(ts.alphabet, ts.trunc)
     return TensorSequence(ts.alphabet, ts.trunc,
                           ts.array * np.reshape(
-                              np.where(ts.indices != 0, (1 - np.exp(-ts.alphabet.index_to_length(ts.indices) * lam * dt)) /
-                              (lam * ts.alphabet.index_to_length(ts.indices)), dt),
-                              ts.array.shape),
-                          ts.indices)
+                              np.where(lengths_arr != 0, (1 - np.exp(-lengths_arr * lam * dt)) / (lam * lengths_arr), dt),
+                              (len(ts), 1, 1)
+                          ))
+
 
 @jit(nopython=True)
 def G_resolvent(ts: TensorSequence, lam: float) -> TensorSequence:
@@ -166,6 +180,6 @@ def G_resolvent(ts: TensorSequence, lam: float) -> TensorSequence:
     :return: A result of application of the operator to ts.
     """
     return TensorSequence(ts.alphabet, ts.trunc,
-                          ts.array * np.reshape(1 / (1 + lam * ts.alphabet.index_to_length(ts.indices)), ts.array.shape),
-                          ts.indices)
+                          ts.array * np.reshape(1 / (1 + lam * get_lengths_array(ts.alphabet, ts.trunc)),
+                                                (len(ts), 1, 1)))
 
