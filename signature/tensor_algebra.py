@@ -139,7 +139,7 @@ class TensorAlgebra:
         :param trunc: The truncation level, i.e., the maximum length of words considered in this TensorSequence.
         :return: A TensorSequence constructed from the provided array and indices.
         """
-        array = np.array(array, dtype=float64)
+        array = np.array(array, dtype=complex128)
 
         return TensorSequence(self.alphabet, trunc, array)
 

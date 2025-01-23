@@ -236,6 +236,15 @@ class TensorSequence:
         """
         return self.__trunc
 
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        """
+        Returns the shape of the TensorSequence array.
+
+        :return: Shape of self.array.
+        """
+        return self.array.shape
+
     def update(self, ts: TensorSequence) -> None:
         """
         Updates the attributes of the instance copying the attributes of ts.

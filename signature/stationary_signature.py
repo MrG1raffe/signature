@@ -3,10 +3,14 @@ import numpy as np
 from numpy.typing import NDArray
 from numpy import float64, complex128
 from typing import Union
+from tqdm import tqdm
+from scipy.optimize import minimize
 
 from .tensor_sequence import TensorSequence
 from .alphabet import Alphabet
 from .numba_utility import factorial
+from .utility import get_lengths_array
+
 
 def stationary_signature_from_path(
     path: NDArray[float64],
@@ -52,12 +56,72 @@ def stationary_signature_from_path(
 
     return __sum_steps_stat(array_steps, trunc, alphabet, t_grid, lam, return_negative)
 
+
+def get_step_signature(dt: float, dW: float, trunc, lam, alphabet):
+    """
+    Computes a signature of the one-step path increment of the extended Brownian motion (t, W_t).
+    """
+    dim = 2
+
+    path_inc = np.array([dt, dW / dt])
+
+    n_indices = alphabet.number_of_elements(trunc)
+    array_step = np.zeros(n_indices)
+    array_step[0] = 1
+
+    for n in range(1, trunc + 1):
+        tp_n = path_inc
+        for i in range(n - 1):
+            inc_shape = (1,) * len(tp_n.shape) + (dim,)
+            tp_n = tp_n.reshape(tp_n.shape + (1,)) * path_inc.reshape(inc_shape)
+
+        idx_start = alphabet.number_of_elements(n - 1)
+        array_step[idx_start:idx_start + dim ** n] = tp_n.reshape((-1,)).T * __h(dt=dt, n=n, lam=lam)
+
+    return TensorSequence(alphabet, trunc, array_step)
+
+
 @jit(nopython=True)
 def __h(dt: Union[float, NDArray[float64]], n: int, lam: float):
     """
-    Calculates a stationary lambda-signature of order n of the path X_t = t on [0, dt].
+    Calculates a stationary lambda-signature (or standard signature if lam == 0)
+    of order n of the path X_t = t on [0, dt].
     """
-    return ((1 - np.exp(-lam * dt)) / lam)**n / factorial(n)
+    if np.isclose(lam, 0):
+        return dt ** n / factorial(n)
+    else:
+        return ((1 - np.exp(-lam * dt)) / lam) ** n / factorial(n)
+
+
+def strip_bm_path(signal, t_grid, ts, trunc, lam=0):
+    """
+    Strips the brownian motion from the signal path assuming that
+    signal_t = <ts, Sig(t, W_t^λ)>
+    """
+    rng = np.random.default_rng(seed=42)
+    dt = np.diff(t_grid)
+    alphabet = Alphabet(2)
+    path_sig = TensorSequence(alphabet, trunc, np.ones(1))
+    dW = np.zeros(t_grid.size - 1)
+    for i in tqdm(range(1, len(t_grid))):
+        def loss(x):
+            signal_from_inc = ts @ discount_ts(path_sig, dt=dt[i - 1], lam=lam).tensor_prod(
+                get_step_signature(dt=dt[i - 1], dW=x[0], trunc=trunc, lam=lam, alphabet=alphabet)
+            )
+            return np.abs(signal_from_inc - signal[i]).squeeze() ** 2
+
+        if loss([0]) == loss([1]) and loss([0]) > 0:
+            return np.nan
+
+        std = np.sqrt(dt[i - 1])
+        x0 = np.array([rng.normal() * std / 100])
+        res = minimize(loss, x0=x0, method="BFGS", bounds=[(-5 * std, 5 * std)])
+
+        dW[i - 1] = res.x[0]
+        step_sig = get_step_signature(dt[i - 1], res.x[0], trunc=5, lam=lam, alphabet=alphabet)
+        path_sig = discount_ts(path_sig, dt=dt[i - 1], lam=lam).tensor_prod(step_sig)
+    return np.concatenate([[0], np.cumsum(dW)])
+
 
 @jit(nopython=True)
 def __sum_steps_stat(
@@ -96,12 +160,6 @@ def __sum_steps_stat(
 
 
 ### Operators ###
-
-
-@jit(nopython=True)
-def get_lengths_array(alphabet: Alphabet, trunc: int) -> NDArray[float64]:
-    return alphabet.index_to_length(np.arange(alphabet.number_of_elements(trunc)))
-
 
 @jit(nopython=True)
 def G(ts: TensorSequence) -> TensorSequence:

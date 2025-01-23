@@ -25,7 +25,7 @@ def expected_signature(t: Union[float, NDArray[float64]], trunc: int) -> TensorS
     return w.tensor_exp(trunc)
 
 
-def expected_stationary_signature(trunc: int, lam: int, t: float = None, n_points: int = 100) -> TensorSequence:
+def expected_stationary_signature(trunc: int, lam: float, t: float = None, n_points: int = 100) -> TensorSequence:
     """
     Computes expected stationary lambda-signature of X_t = (t, W_t). If t is not specified,
     computes stationary expected signature E^lam = E[SigX^lam]. Otherwise, computes E_t^lam = E[SigX_{0, t}^lam].

@@ -76,6 +76,13 @@ class ShuffleOperator:
         """
         return self.__trunc
 
+    def __get_extended_array(self, ts: TensorSequence):
+        n_elements = self.alphabet.number_of_elements(self.trunc)
+
+        new_array = np.zeros((n_elements,) + ts.shape[1:], dtype=complex128)
+        new_array[:min(n_elements, ts.shape[0])] = ts.array[:min(n_elements, ts.shape[0])]
+        return new_array
+
     def shuffle_prod(
         self,
         ts1: TensorSequence,
@@ -83,7 +90,17 @@ class ShuffleOperator:
     ):
         index_left, index_right, index_result, count = self.shuffle_table
 
-        source = count * ts1.array[index_left, 0, 0] * ts2.array[index_right, 0, 0]
+        if ts1.trunc < self.trunc:
+            array_1 = self.__get_extended_array(ts1)
+        else:
+            array_1 = ts1.array
+
+        if ts2.trunc < self.trunc:
+            array_2 = self.__get_extended_array(ts2)
+        else:
+            array_2 = ts2.array
+
+        source = count * array_1[index_left, 0, 0] * array_2[index_right, 0, 0]
         linear_result = np.zeros(index_result[-1] + 1, dtype=complex128)
         for i in range(len(index_result)):
             linear_result[index_result[i]] = linear_result[index_result[i]] + source[i]
