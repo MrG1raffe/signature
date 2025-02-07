@@ -221,7 +221,7 @@ class TensorAlgebra:
         if trunc is None:
             trunc = ts.trunc
 
-        n_coefficients = 2**(trunc + 1) - 1
+        n_coefficients = self.alphabet.number_of_elements(trunc)
 
         indices = np.arange(n_coefficients)
         coefficients = np.zeros(n_coefficients)

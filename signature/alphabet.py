@@ -86,8 +86,8 @@ class Alphabet:
         """
         if not index:
             return "∅"
-        length = floor(np.log2(index + 1) / np.log2(self.__dim))
-        index = index - (self.__dim ** length - 1)
+        length = floor(np.log2(index * (self.__dim - 1) + 1) / np.log2(self.__dim))
+        index = index - (self.__dim ** length - 1) // (self.__dim - 1)
         word_list = [""] * length
         for i in range(length):
             p = self.__dim ** (length - 1 - i)
