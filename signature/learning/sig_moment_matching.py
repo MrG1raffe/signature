@@ -3,6 +3,7 @@ from numpy.typing import NDArray
 from numpy import float64, int64, complex128
 from typing import Tuple
 from scipy.optimize import minimize
+from scipy.special import gamma
 import statsmodels.api as sm
 from statsmodels.graphics.tsaplots import plot_acf
 
@@ -13,6 +14,7 @@ from ..tensor_sequence import TensorSequence
 from ..tensor_algebra import TensorAlgebra
 from ..expected_signature import expected_stationary_signature
 from ..stationary_signature import stationary_signature_from_path
+from ..utility import get_lengths_array
 
 
 class StatSigSignal:
@@ -88,7 +90,13 @@ class StatSigSignal:
         e_signal_sig = SignalSig.array[:, -1, :].mean(axis=1).real
 
         rng = np.random.default_rng(seed=42)
-        x0 = rng.normal(size=8) * 0.01
+        if self.trunc == 3:
+            x_size = 8
+        elif self.trunc == 2:
+            x_size = 4
+        else:
+            raise NotImplementedError("Implement properly the number of linearly independent elements!")
+        x0 = rng.normal(size=x_size) * 0.01
 
         def callback(x, f=None, context=None, accept=None, convergence=None):
             val = self.loss(x, e_signal_sig=e_signal_sig, signal_moments=signal_moments, verbose=True)
@@ -104,9 +112,10 @@ class StatSigSignal:
         self.l = self.normalize_ts(ts=self.ts_from_x(res.x), loc=signal_mean, scale=signal_std)
 
     def ts_from_x(self, x):
-        mask = [0, 2, 4, 6, 8, 10, 12, 14]
-        array = np.zeros(self.ta.alphabet.number_of_elements(self.trunc))
-        array[mask] = x
+        mask = np.array([0, 2, 4, 6, 8, 10, 12, 14])
+        number_of_elements = self.ta.alphabet.number_of_elements(self.trunc)
+        array = np.zeros(number_of_elements)
+        array[mask[mask < number_of_elements]] = x
         return self.ta.from_array(trunc=self.trunc, array=array)
 
     def normalize_ts(self, ts: TensorSequence, loc: float = 0, scale: float = 1):
@@ -142,8 +151,11 @@ class StatSigSignal:
 
         signal_l_moments = (signal_l[:, None] ** np.arange(3, self.max_stationary_moment)).mean(axis=0)
 
-        loss_esig = np.mean((e_signal_sig - e_signal_sig_l) ** 2) * self.loss_weights[0]
-        loss_higher_moments = np.mean((signal_l_moments - signal_moments) ** 2) * self.loss_weights[1]
+        weight_level = gamma(get_lengths_array(self.ta.alphabet, trunc=self.trunc_signature_moments) + 1)
+        loss_esig = np.sqrt(np.mean(((e_signal_sig - e_signal_sig_l) * weight_level) ** 2)) * self.loss_weights[0]
+        # print("loss:", ((e_signal_sig - e_signal_sig_l)) ** 2)
+        # print("loss (weighted):", ((e_signal_sig - e_signal_sig_l) * weight_level) ** 2)
+        loss_higher_moments = np.sqrt(np.mean((signal_l_moments - signal_moments) ** 2)) * self.loss_weights[1]
 
         if verbose:
             print(f"Esig: {loss_esig}, Stationary moments: {loss_higher_moments}")
