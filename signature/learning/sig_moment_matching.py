@@ -1,20 +1,89 @@
 import numpy as np
 from numpy.typing import NDArray
 from numpy import float64, int64, complex128
-from typing import Tuple
+from typing import Tuple, List
 from scipy.optimize import minimize
 from scipy.special import gamma
 import statsmodels.api as sm
 from statsmodels.graphics.tsaplots import plot_acf
+from math import factorial
 
 from simulation.diffusion import Diffusion
 import matplotlib.pyplot as plt
 
 from ..tensor_sequence import TensorSequence
 from ..tensor_algebra import TensorAlgebra
-from ..expected_signature import expected_stationary_signature
+from ..expected_signature import expected_stationary_signature, expected_signature
 from ..stationary_signature import stationary_signature_from_path
 from ..utility import get_lengths_array
+from ..signature_of_signature import get_signature_of_linear_form
+
+
+class SigSignal:
+    trunc: int
+    t_grid: NDArray[float64]
+    trunc_signature_moments: int
+    eSig: None # by default extended Brownian motion
+    optimizer: str
+
+    l: TensorSequence = None
+    words: List
+    ta: TensorAlgebra
+    eSig: TensorSequence
+    SigS: TensorSequence
+
+    def __init__(
+        self,
+        trunc,
+        T: float,
+        trunc_signature_moments: int = 5,
+        eSig: TensorSequence = None,
+        optimizer="Powell",
+    ):
+        self.trunc = trunc
+        self.trunc_signature_moments = trunc_signature_moments
+        self.optimizer = optimizer
+
+        self.ta = TensorAlgebra(dim=2, trunc=self.trunc * self.trunc_signature_moments)
+
+        if eSig is None:
+            self.eSig = expected_signature(t=T, trunc=self.trunc * self.trunc_signature_moments)
+        else:
+            self.eSig = eSig
+
+        n_moments = self.ta.alphabet.number_of_elements(self.trunc_signature_moments)
+        words = [self.ta.alphabet.index_to_word(idx) for idx in range(n_moments)]
+        self.words = words
+
+    def x_to_ts(self, x):
+        array = np.zeros(self.ta.alphabet.number_of_elements(self.trunc))
+        array[1:] = x
+        return self.ta.from_array(trunc=self.trunc * self.trunc_signature_moments, array=array)
+
+    def fit(self, expected_signal_sig: TensorSequence):
+        x0 = np.zeros(self.ta.alphabet.number_of_elements(self.trunc) - 1)
+
+        def callback(x, f=None, context=None, accept=None, convergence=None):
+            val = self.loss(x, expected_signal_sig)
+            print(f"New iteration: \n x = {x}, \n val={val}. \n")
+
+        res = minimize(lambda x: self.loss(x, expected_signal_sig), x0, method=self.optimizer, callback=callback)
+        self.l = self.x_to_ts(res.x)
+
+    def loss(self, x, expected_signal_sig):
+        l = self.x_to_ts(x)
+        signal_sig_coefs = get_signature_of_linear_form(ts=l, trunc_moments=self.trunc_signature_moments, ta=self.ta)
+
+        loss = 0
+        for word in self.words:
+            if "2" in word:
+                loss_word = np.sqrt(
+                    np.mean(np.abs((signal_sig_coefs[word] @ self.eSig).real.squeeze() - expected_signal_sig[word].real.squeeze()) ** 2))
+                loss += loss_word * factorial(len(word))
+
+        return loss
+
+
 
 
 class StatSigSignal:
