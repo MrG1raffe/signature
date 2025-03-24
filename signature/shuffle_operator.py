@@ -4,6 +4,7 @@ from numba.experimental import jitclass
 import numba as nb
 import numpy as np
 
+
 from .tensor_sequence import TensorSequence
 from .alphabet import Alphabet
 from .shuffle import shuffle_product
