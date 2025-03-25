@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from ..shuffle import shuffle_product
-from .words import number_of_words_up_to_trunc, index_to_length_of_word, index_to_word, word_to_index_vect
+from .words import number_of_words_up_to_trunc, index_to_word_len, index_to_word, word_to_index_vect
 
 
 def get_shuffle_table(table_trunc: int, dim: int = 2):
@@ -12,7 +12,7 @@ def get_shuffle_table(table_trunc: int, dim: int = 2):
     table_len = 0
 
     ij_array = np.array(np.meshgrid(np.arange(n_words), np.arange(n_words))).T.reshape(-1, 2)
-    ij_array = ij_array[index_to_length_of_word(jnp.array(ij_array), dim=dim).sum(axis=1) <= table_trunc]
+    ij_array = ij_array[index_to_word_len(jnp.array(ij_array), dim=dim).sum(axis=1) <= table_trunc]
 
     for i, j in ij_array:
         words_res, counts = shuffle_product(int(index_to_word(i)), int(index_to_word(j)))

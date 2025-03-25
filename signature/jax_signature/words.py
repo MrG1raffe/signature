@@ -29,7 +29,7 @@ def number_of_words_up_to_trunc(trunc: Union[int, jax.Array], dim: int = 2):
 
 
 @jax.jit
-def index_to_length_of_word(index: Union[int, jax.Array], dim: int = 2) -> jax.Array:
+def index_to_word_len(index: Union[int, jax.Array], dim: int = 2) -> jax.Array:
     """
     Computes the length of the word corresponding to a given index.
 
