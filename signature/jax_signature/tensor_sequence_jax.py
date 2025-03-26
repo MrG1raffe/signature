@@ -93,7 +93,7 @@ class TensorSequenceJAX:
         :param ts: The TensorSequence to add.
         :return: A new TensorSequence that is the result of the addition.
         """
-        return TensorSequenceJAX(array=self.array + ts.array, trunc=max(self.trunc, ts.trunc), dim=self.dim)
+        return TensorSequenceJAX(array=self.array + ts.array, trunc=jnp.maximum(self.trunc, ts.trunc), dim=self.dim)
 
     def __sub__(self, ts: TensorSequenceJAX) -> TensorSequenceJAX:
         """
@@ -102,7 +102,7 @@ class TensorSequenceJAX:
         :param ts: The TensorSequence to subtract.
         :return: A new TensorSequence that is the result of the subtraction.
         """
-        return TensorSequenceJAX(array=self.array - ts.array, trunc=max(self.trunc, ts.trunc), dim=self.dim)
+        return TensorSequenceJAX(array=self.array - ts.array, trunc=jnp.maximum(self.trunc, ts.trunc), dim=self.dim)
 
     def __matmul__(self, ts: TensorSequenceJAX) -> Union[float, jax.Array]:
         """
@@ -127,20 +127,26 @@ class TensorSequenceJAX:
         """
         Calculates the projection of TensorSequence with respect to the given word.
 
-        :param word: The to calculate the projection.
+        :param word: The word (as integer) to calculate the projection.
         :return: A new TensorSequence representing the projection.
         """
         indices = jnp.arange(len(self))
         word_length = word_len(word)
         word_index = word_to_index(word, dim=self.dim)
-        indices_mask = (((indices - word_index) % self.dim**word_length) == 0) & (indices >= word_index)
-        # indices_to_keep = indices[indices_mask]
-        length_arr = index_to_word_len(indices[indices_mask], dim=self.dim)
-        new_indices = (indices[indices_mask] - self.dim**length_arr + 1) // self.dim**word_length + \
-            self.dim**(length_arr - word_length) - 1
+
+        # A mask for indices to keep
+        indices_mask = (((indices - word_index) % self.dim ** word_length) == 0) & (indices >= word_index)
+
+        # Compute new indices
+        length_arr = index_to_word_len(indices, dim=self.dim)
+        new_indices = (indices - self.dim ** length_arr + 1) // self.dim ** word_length + \
+                      self.dim ** (length_arr - word_length) - 1
+        # Set out-of-bounds index for non-valid ones
+        new_indices = jnp.where(indices_mask, new_indices, len(self) + 1)
 
         array = jnp.zeros_like(self.array)
-        array = array.at[new_indices].set(self.array[indices_mask])
+        array = array.at[new_indices].set(jnp.where(indices_mask, self.array * indices_mask, 0))
+
         return TensorSequenceJAX(array=array, trunc=self.trunc, dim=self.dim)
 
     def plot(self, trunc: int = None, ax: plt.axis = None, **kwargs) -> None:
