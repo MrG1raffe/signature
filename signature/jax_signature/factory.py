@@ -26,7 +26,7 @@ def unit_like(ts: TensorSequenceJAX) -> TensorSequenceJAX:
     return TensorSequenceJAX(array=array.at[0].set(1), trunc=ts.trunc, dim=ts.dim)
 
 
-def zero(trunc: int, dim: int = 2) -> TensorSequenceJAX:
+def zero(trunc: int, dim: int) -> TensorSequenceJAX:
     """
     Creates an instance of TensorSequenceJAX with no indices and the same sizes of other axis.
 
@@ -39,7 +39,7 @@ def zero(trunc: int, dim: int = 2) -> TensorSequenceJAX:
     return TensorSequenceJAX(array=array, trunc=trunc, dim=dim)
 
 
-def unit(trunc: int, dim: int = 2) -> TensorSequenceJAX:
+def unit(trunc: int, dim: int) -> TensorSequenceJAX:
     """
     Creates an instance of TensorSequenceJAX with index 1 corresponding to the word Ø.
 
@@ -52,7 +52,7 @@ def unit(trunc: int, dim: int = 2) -> TensorSequenceJAX:
     return TensorSequenceJAX(array=array.at[0].set(1), trunc=trunc, dim=dim)
 
 
-def from_word(word: int, trunc: int, dim: int = 2) -> TensorSequenceJAX:
+def from_word(word: int, trunc: int, dim: int) -> TensorSequenceJAX:
     """
     Creates a TensorSequence from a given word and a truncation level.
 
@@ -66,7 +66,7 @@ def from_word(word: int, trunc: int, dim: int = 2) -> TensorSequenceJAX:
     return TensorSequenceJAX(array=array.at[index].set(1), trunc=trunc, dim=dim)
 
 
-def from_dict(word_dict: dict, trunc: int, dim: int = 2) -> TensorSequenceJAX:
+def from_dict(word_dict: dict, trunc: int, dim: int) -> TensorSequenceJAX:
     """
     Creates a TensorSequence from a given word dictionary and a truncation level.
 
@@ -81,7 +81,7 @@ def from_dict(word_dict: dict, trunc: int, dim: int = 2) -> TensorSequenceJAX:
     else:
         # sort the arrays with respect to indices
         indices, values = zip(*sorted(zip(
-            [word_to_index(word) for word in word_dict.keys()],
+            [word_to_index(word=word, dim=dim) for word in word_dict.keys()],
             list(word_dict.values())
         )))
         indices = jnp.array(indices)
@@ -94,7 +94,7 @@ def from_dict(word_dict: dict, trunc: int, dim: int = 2) -> TensorSequenceJAX:
     return TensorSequenceJAX(array=array, trunc=trunc, dim=dim)
 
 
-def from_array(array: jax.Array, trunc: int, dim: int = 2) -> TensorSequenceJAX:
+def from_array(array: jax.Array, trunc: int, dim: int) -> TensorSequenceJAX:
     """
     Creates a TensorSequence from a given array and (optionally) indices. If indices are not given, takes the
     indices of the first elements of the tensor algebra.

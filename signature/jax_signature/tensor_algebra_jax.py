@@ -7,3 +7,5 @@ from .factory import zero, zero_like, unit, unit_like, from_word, from_dict, fro
 from .shuffle_table import get_shuffle_table
 from .shuffle_product import shuffle_prod, shuffle_pow, shuffle_exp
 from .tensor_product import tensor_prod_word, tensor_prod, tensor_pow, tensor_exp, resolvent
+from .algebra_basis import AlgebraBasis
+from .path_signature import path_to_signature, path_to_stationary_signature

@@ -1,10 +1,8 @@
 from numba import jit
 import numpy as np
-from numpy.typing import NDArray
-from numpy import float64
 from scipy.optimize import minimize
 
-from .tensor_sequence import TensorSequence
+from signature.old_versions.tensor_sequence import TensorSequence
 from .utility import get_lengths_array
 
 

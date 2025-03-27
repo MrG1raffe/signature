@@ -4,7 +4,7 @@ from numpy import float64
 from numba import jit
 from typing import Callable
 
-from .tensor_sequence import TensorSequence
+from signature.old_versions.tensor_sequence import TensorSequence
 from .stationary_signature import G, semi_integrated_scheme, discount_ts
 
 @jit(nopython=True)

@@ -1,11 +1,11 @@
 import numpy as np
 from numpy.typing import NDArray
-from numpy import float64, complex128
+from numpy import float64
 from typing import Union
 from numba import jit
 
-from .tensor_sequence import TensorSequence
-from .alphabet import Alphabet
+from signature.old_versions.tensor_sequence import TensorSequence
+from signature.old_versions.alphabet import Alphabet
 from .stationary_signature import G_inv
 from .ode_integration import ode_stat_pece
 

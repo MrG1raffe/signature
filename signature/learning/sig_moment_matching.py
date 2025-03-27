@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.typing import NDArray
-from numpy import float64, int64, complex128
+from numpy import float64
 from typing import Tuple, List
 from scipy.optimize import minimize
 from scipy.special import gamma
@@ -11,8 +11,8 @@ from math import factorial
 from simulation.diffusion import Diffusion
 import matplotlib.pyplot as plt
 
-from ..tensor_sequence import TensorSequence
-from ..tensor_algebra import TensorAlgebra
+from signature.old_versions.tensor_sequence import TensorSequence
+from signature.old_versions.tensor_algebra import TensorAlgebra
 from ..expected_signature import expected_stationary_signature, expected_signature
 from ..stationary_signature import stationary_signature_from_path
 from ..utility import get_lengths_array

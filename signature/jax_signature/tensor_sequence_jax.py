@@ -111,7 +111,8 @@ class TensorSequenceJAX:
         :param ts: The TensorSequence with which to compute the inner product.
         :return: The inner product as a scalar.
         """
-        return jnp.sum(self.array * ts.array, axis=0)
+        return jnp.einsum("i..., i... -> ...", self.array, ts.array)
+
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -145,7 +146,8 @@ class TensorSequenceJAX:
         new_indices = jnp.where(indices_mask, new_indices, len(self) + 1)
 
         array = jnp.zeros_like(self.array)
-        array = array.at[new_indices].set(jnp.where(indices_mask, self.array * indices_mask, 0))
+        array = array.at[new_indices].set(jnp.where(jnp.einsum("i..., i -> i...", jnp.ones_like(self.array), indices_mask),
+                                                    jnp.einsum("i..., i -> i...", self.array, indices_mask), 0))
 
         return TensorSequenceJAX(array=array, trunc=self.trunc, dim=self.dim)
 
@@ -173,3 +175,7 @@ class TensorSequenceJAX:
                       labels=[str(index_to_word(i, dim=self.dim)) for i in indices],
                       rotation=-90)
         ax.plot()
+
+    @jax.jit
+    def get_lengths_array(self) -> jax.Array:
+        return index_to_word_len(index=jnp.arange(len(self)), dim=self.dim)

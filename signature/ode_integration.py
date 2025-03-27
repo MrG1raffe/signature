@@ -1,11 +1,10 @@
-import numpy as np
 from numpy.typing import NDArray
 from numpy import float64
 from numba import jit
 from typing import Callable
 
-from .tensor_sequence import TensorSequence
-from .stationary_signature import G, semi_integrated_scheme, discount_ts
+from signature.old_versions.tensor_sequence import TensorSequence
+from .stationary_signature import semi_integrated_scheme, discount_ts
 
 @jit(nopython=True)
 def ode_stat_pece(

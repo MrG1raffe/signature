@@ -17,7 +17,7 @@ def word_len(word: Union[int, jax.Array]):
 
 
 @jax.jit
-def number_of_words_up_to_trunc(trunc: Union[int, jax.Array], dim: int = 2):
+def number_of_words_up_to_trunc(trunc: Union[int, jax.Array], dim: int):
     """
     Calculates the number of words of length up to trunc.
 
@@ -29,7 +29,7 @@ def number_of_words_up_to_trunc(trunc: Union[int, jax.Array], dim: int = 2):
 
 
 @jax.jit
-def index_to_word_len(index: Union[int, jax.Array], dim: int = 2) -> jax.Array:
+def index_to_word_len(index: Union[int, jax.Array], dim: int) -> jax.Array:
     """
     Computes the length of the word corresponding to a given index.
 
@@ -42,7 +42,7 @@ def index_to_word_len(index: Union[int, jax.Array], dim: int = 2) -> jax.Array:
 
 
 @jax.jit
-def index_to_word(index: int, dim: int = 2) -> jnp.int64:
+def index_to_word(index: int, dim: int) -> jnp.int64:
     """
     Converts an index back to its corresponding word in the alphabet.
 
@@ -50,8 +50,8 @@ def index_to_word(index: int, dim: int = 2) -> jnp.int64:
     :param index: An integer representing the index to convert.
     :return: An integer representing the word corresponding to the given index.
     """
-    length = jnp.floor(jnp.log2(index + 1) / jnp.log2(dim) + 1e-10).astype(jnp.int64)
-    index = index - (dim ** length - 1)
+    length = jnp.floor(jnp.log2(index * (dim - 1) + 1) / jnp.log2(dim) + 1e-10).astype(jnp.int64)
+    index = index - (dim ** length - 1) // (dim - 1)
 
     def body_fun(i, state):
         res_tmp, index_inner = state
@@ -67,7 +67,7 @@ def index_to_word(index: int, dim: int = 2) -> jnp.int64:
 
 
 @jax.jit
-def word_to_base_dim_number(word: int, dim: int = 2) -> int:
+def word_to_base_dim_number(word: int, dim: int) -> int:
     """
     Converts a word to the corresponding number with base `dim`.
 
@@ -77,15 +77,15 @@ def word_to_base_dim_number(word: int, dim: int = 2) -> int:
              in alphabet {1, 2, ..., dim}.
     """
     def cond_fun(state):
-        word_innder, _, _ = state
-        return word_innder > 0
+        word_inner, _, _ = state
+        return word_inner > 0
 
     def body_fun(state):
-        word_innder, res, p = state
-        res += ((word_innder % 10) - 1) * dim ** p
-        word_innder //= 10
+        word_inner, res, p = state
+        res += ((word_inner % 10) - 1) * dim ** p
+        word_inner //= 10
         p += 1
-        return word_innder, res, p
+        return word_inner, res, p
 
     # Loop state: (word, res, p)
     _, result, _ = jax.lax.while_loop(cond_fun=cond_fun, body_fun=body_fun, init_val=(word, 0, 0))
@@ -93,7 +93,7 @@ def word_to_base_dim_number(word: int, dim: int = 2) -> int:
 
 
 @jax.jit
-def word_to_index(word: int, dim: int = 2) -> int:
+def word_to_index(word: int, dim: int) -> int:
     """
     Converts a word to its corresponding one-dimensional index in the tensor algebra.
 
@@ -101,7 +101,7 @@ def word_to_index(word: int, dim: int = 2) -> int:
     :param word: A string representing the word to convert.
     :return: An integer representing the index of the word.
     """
-    return dim ** word_len(word) - 1 + word_to_base_dim_number(word, dim)
+    return number_of_words_up_to_trunc(trunc=word_len(word) - 1, dim=dim) + word_to_base_dim_number(word, dim)
 
 
 word_to_base_dim_number_vect = jax.jit(jax.vmap(word_to_base_dim_number, in_axes=(0, None)))

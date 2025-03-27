@@ -6,9 +6,9 @@ from typing import Union
 from tqdm import tqdm
 from scipy.optimize import minimize
 
-from .tensor_sequence import TensorSequence
-from .alphabet import Alphabet
-from .numba_utility import factorial
+from signature.old_versions.tensor_sequence import TensorSequence
+from signature.old_versions.alphabet import Alphabet
+from signature.jax_signature.numba_utility import factorial
 from .utility import get_lengths_array
 
 
@@ -143,7 +143,7 @@ def __sum_steps_stat(
                                np.ascontiguousarray(array_steps[:, i]).reshape((n_indices, 1, 1)))
                 for i in range(array_steps.shape[1])]
     for i in range(len(ts_steps) - 1):
-        # Stationary Chan's identity
+        # Stationary Chen's identity
         ts_steps[i + 1].update(discount_ts(ts=ts_steps[i], dt=dt[i], lam=lam).tensor_prod(ts_steps[i + 1]))
 
     if return_negative:

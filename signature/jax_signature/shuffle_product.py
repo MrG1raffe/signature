@@ -31,6 +31,14 @@ def shuffle_prod(ts1: TensorSequenceJAX, ts2: TensorSequenceJAX, shuffle_table: 
 
 
 @jax.jit
+def shuffle_prod_2d(ts1: TensorSequenceJAX, ts2: TensorSequenceJAX, shuffle_table: jax.Array) -> TensorSequenceJAX:
+    return TensorSequenceJAX(array=_shuffle_prod_arr_vect(ts1.array.reshape((len(ts1), -1)),
+                                                          ts2.array.reshape((len(ts2), -1)),
+                                                          shuffle_table),
+                             trunc=ts1.trunc, dim=ts1.dim)
+
+
+@jax.jit
 def shuffle_pow(ts: TensorSequenceJAX, p: int, shuffle_table: jax.Array) -> TensorSequenceJAX:
     """
     Raises the TensorSequence to a shuffle power p.

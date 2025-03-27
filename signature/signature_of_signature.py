@@ -1,5 +1,5 @@
-from .tensor_sequence import TensorSequence
-from .tensor_algebra import TensorAlgebra
+from signature.old_versions.tensor_sequence import TensorSequence
+from signature.old_versions.tensor_algebra import TensorAlgebra
 
 
 def get_signature_of_linear_form(ts: TensorSequence, trunc_moments: int, ta: TensorAlgebra):
