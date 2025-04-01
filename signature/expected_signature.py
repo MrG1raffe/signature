@@ -1,16 +1,16 @@
-import numpy as np
-from numpy.typing import NDArray
-from numpy import float64
+import jax
+import jax.numpy as jnp
 from typing import Union
-from numba import jit
 
-from signature.old_versions.tensor_sequence import TensorSequence
-from signature.old_versions.alphabet import Alphabet
-from .stationary_signature import G_inv
-from .ode_integration import ode_stat_pece
+from .tensor_sequence import TensorSequence
+from .operators import G_inv
+from .factory import unit
+from .words import number_of_words_up_to_trunc
+from .tensor_product import tensor_prod, tensor_exp, tensor_prod_word
+from .ode_integration import ode_solver, step_fun_semi_int_pece
 
 
-def expected_signature(t: Union[float, NDArray[float64]], trunc: int) -> TensorSequence:
+def expected_bm_signature(t: Union[float, jax.Array], trunc: int) -> TensorSequence:
     """
     Calculates the expected signature of X_t = (t, W_t).
 
@@ -19,13 +19,12 @@ def expected_signature(t: Union[float, NDArray[float64]], trunc: int) -> TensorS
 
     :return: expected signature evaluated at t as a TensorSequence instance.
     """
-    alphabet = Alphabet(2)
     # w = (1 + 0.5 * 22) * t
-    w = get_1_22(alphabet, trunc) * np.reshape(t, (1, -1, 1))
-    return w.tensor_exp(trunc)
+    w = get_1_22(trunc) * jnp.reshape(t, (1, -1))
+    return tensor_exp(ts=w, N_trunc=trunc)
 
 
-def expected_stationary_signature(trunc: int, lam: float, t: float = None, n_points: int = 100) -> TensorSequence:
+def expected_bm_stationary_signature(trunc: int, lam: float, t: float = None, n_points: int = 100) -> TensorSequence:
     """
     Computes expected stationary lambda-signature of X_t = (t, W_t). If t is not specified,
     computes stationary expected signature E^lam = E[SigX^lam]. Otherwise, computes E_t^lam = E[SigX_{0, t}^lam].
@@ -37,32 +36,30 @@ def expected_stationary_signature(trunc: int, lam: float, t: float = None, n_poi
 
     :return: expected signature as a TensorSequence instance.
     """
+    dim = 2
     # w = 1 + 0.5 * 22
-    alphabet = Alphabet(2)
-    w = get_1_22(alphabet, trunc)
+    w = get_1_22(trunc)
 
     if t is None:
-        res = TensorSequence.unit(alphabet, trunc)
-        v = TensorSequence.unit(alphabet, trunc)
+        res = unit(trunc, dim)
+        v = unit(trunc, dim)
         for _ in range(trunc):
-            v.update(G_inv(v.tensor_prod(w)) / lam)
-            res.update(res + v)
+            v = G_inv(tensor_prod(v, w)) / lam
+            res = res + v
         return res
     else:
-        t_grid = np.linspace(0, t, n_points)
-        return ode_stat_pece(func=__expected_sig_ode_func, t_grid=t_grid, u=TensorSequence.unit(alphabet, trunc), lam=lam)
+        t_grid = jnp.linspace(0, t, n_points)
+        args = {"lam": lam}
+        return ode_solver(fun=__expected_sig_ode_func, step_fun=step_fun_semi_int_pece,
+                          t_grid=t_grid, init=unit(trunc, dim), args=args)
 
 
-@jit(nopython=True)
-def get_1_22(alphabet: Alphabet, trunc: int):
-    array = np.zeros(alphabet.number_of_elements(trunc))
-    array[1] = 1
-    array[6] = 0.5
-    return TensorSequence(alphabet, trunc, array)
+def get_1_22(trunc: int) -> TensorSequence:
+    array = jnp.zeros(number_of_words_up_to_trunc(trunc, 2))
+    array = array.at[jnp.array([1, 6])].set(jnp.array([1, 0.5]))
+    return TensorSequence(array=array, trunc=trunc, dim=2)
 
 
-@jit(nopython=True)
-def __expected_sig_ode_func(l: TensorSequence):
-    # w = 1 + 0.5 * 22
-    w = get_1_22(Alphabet(2), l.trunc)
-    return l.tensor_prod(w)
+@jax.jit
+def __expected_sig_ode_func(ell: TensorSequence, args: dict) -> TensorSequence:
+    return tensor_prod_word(ell, 1) + tensor_prod_word(ell, 22) / 2

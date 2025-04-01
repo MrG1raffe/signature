@@ -3,7 +3,7 @@ from numpy import int64
 from numba import jit
 from typing import Tuple
 
-from signature.jax_signature.numba_utility import combinations
+from signature.numba_utility import combinations
 
 
 @jit(nopython=True)

@@ -8,8 +8,8 @@ from scipy.optimize import minimize
 
 from signature.old_versions.tensor_sequence import TensorSequence
 from signature.old_versions.alphabet import Alphabet
-from signature.jax_signature.numba_utility import factorial
-from .utility import get_lengths_array
+from signature.numba_utility import factorial
+from signature.old_versions.utility import get_lengths_array
 
 
 def stationary_signature_from_path(

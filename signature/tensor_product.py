@@ -3,13 +3,13 @@ import jax.numpy as jnp
 import jax.scipy.special as jsp
 from typing import Union
 
-from .tensor_sequence_jax import TensorSequenceJAX
+from .tensor_sequence import TensorSequence
 from .words import word_len, word_to_base_dim_number, index_to_word_len
 from .factory import zero_like, unit_like
 
 
 @jax.jit
-def tensor_prod_word(ts: TensorSequenceJAX, word: int) -> TensorSequenceJAX:
+def tensor_prod_word(ts: TensorSequence, word: int) -> TensorSequence:
     """
     Performs the tensor product of the current TensorSequence with a given word and
     multiply the result by `coefficient`.
@@ -28,11 +28,11 @@ def tensor_prod_word(ts: TensorSequenceJAX, word: int) -> TensorSequenceJAX:
 
     array = jnp.zeros_like(ts.array)
     array = array.at[new_indices].set(ts.array)
-    return TensorSequenceJAX(array=array, trunc=ts.trunc, dim=ts.dim)
+    return TensorSequence(array=array, trunc=ts.trunc, dim=ts.dim)
 
 
 @jax.jit
-def _tensor_prod_index(ts: TensorSequenceJAX, index: int, coefficient: Union[float, jax.Array] = 1) -> TensorSequenceJAX:
+def _tensor_prod_index(ts: TensorSequence, index: int, coefficient: Union[float, jax.Array] = 1) -> TensorSequence:
     """
     Performs the tensor product of the current TensorSequence with a given index and
     multiply the result by `coefficient`.
@@ -54,11 +54,11 @@ def _tensor_prod_index(ts: TensorSequenceJAX, index: int, coefficient: Union[flo
     array = jnp.zeros_like(ts.array)
     array = array.at[new_indices].set(ts.array * coefficient)
 
-    return TensorSequenceJAX(array=array, trunc=ts.trunc, dim=dim)
+    return TensorSequence(array=array, trunc=ts.trunc, dim=dim)
 
 
 @jax.jit
-def tensor_prod(ts1: TensorSequenceJAX, ts2: TensorSequenceJAX) -> TensorSequenceJAX:
+def tensor_prod(ts1: TensorSequence, ts2: TensorSequence) -> TensorSequence:
     """
     Performs the tensor product of one TensorSequence with another TensorSequence.
 
@@ -81,7 +81,7 @@ def tensor_prod(ts1: TensorSequenceJAX, ts2: TensorSequenceJAX) -> TensorSequenc
 
 
 @jax.jit
-def tensor_pow(ts: TensorSequenceJAX, p: int) -> TensorSequenceJAX:
+def tensor_pow(ts: TensorSequence, p: int) -> TensorSequence:
     """
     Raises the TensorSequence to a tensor power p.
 
@@ -96,7 +96,7 @@ def tensor_pow(ts: TensorSequenceJAX, p: int) -> TensorSequenceJAX:
 
 
 @jax.jit
-def tensor_exp(ts: TensorSequenceJAX, N_trunc: int) -> TensorSequenceJAX:
+def tensor_exp(ts: TensorSequence, N_trunc: int) -> TensorSequence:
     """
     Computes the shuffle exponential of the TensorSequence up to a specified truncation level.
 
@@ -110,7 +110,7 @@ def tensor_exp(ts: TensorSequenceJAX, N_trunc: int) -> TensorSequenceJAX:
     return jax.lax.fori_loop(lower=1, upper=N_trunc + 1, body_fun=body_fun, init_val=unit_like(ts))
 
 
-def resolvent(ts: TensorSequenceJAX, N_trunc) -> TensorSequenceJAX:
+def resolvent(ts: TensorSequence, N_trunc) -> TensorSequence:
     """
     Computes the resolvent of the TensorSequence up to a specified truncation level.
     The resolvent is defined as the series of the TensorSequence's tensor powers.

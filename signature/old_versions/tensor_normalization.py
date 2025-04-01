@@ -3,7 +3,7 @@ import numpy as np
 from scipy.optimize import minimize
 
 from signature.old_versions.tensor_sequence import TensorSequence
-from .utility import get_lengths_array
+from signature.old_versions.utility import get_lengths_array
 
 
 @jit(nopython=True)

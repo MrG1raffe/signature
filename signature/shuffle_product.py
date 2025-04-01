@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import jax.scipy.special as jsp
 
 from .factory import unit_like
-from .tensor_sequence_jax import TensorSequenceJAX
+from .tensor_sequence import TensorSequence
 
 
 @jax.jit
@@ -25,21 +25,21 @@ _shuffle_prod_arr_vect = jax.jit(jax.vmap(_shuffle_prod_arr, in_axes=(1, 1, None
 
 
 @jax.jit
-def shuffle_prod(ts1: TensorSequenceJAX, ts2: TensorSequenceJAX, shuffle_table: jax.Array) -> TensorSequenceJAX:
-    return TensorSequenceJAX(array=_shuffle_prod_arr(ts1.array, ts2.array, shuffle_table),
-                             trunc=ts1.trunc, dim=ts1.dim)
+def shuffle_prod(ts1: TensorSequence, ts2: TensorSequence, shuffle_table: jax.Array) -> TensorSequence:
+    return TensorSequence(array=_shuffle_prod_arr(ts1.array, ts2.array, shuffle_table),
+                          trunc=ts1.trunc, dim=ts1.dim)
 
 
 @jax.jit
-def shuffle_prod_2d(ts1: TensorSequenceJAX, ts2: TensorSequenceJAX, shuffle_table: jax.Array) -> TensorSequenceJAX:
-    return TensorSequenceJAX(array=_shuffle_prod_arr_vect(ts1.array.reshape((len(ts1), -1)),
-                                                          ts2.array.reshape((len(ts2), -1)),
-                                                          shuffle_table),
-                             trunc=ts1.trunc, dim=ts1.dim)
+def shuffle_prod_2d(ts1: TensorSequence, ts2: TensorSequence, shuffle_table: jax.Array) -> TensorSequence:
+    return TensorSequence(array=_shuffle_prod_arr_vect(ts1.array.reshape((len(ts1), -1)),
+                                                       ts2.array.reshape((len(ts2), -1)),
+                                                       shuffle_table),
+                          trunc=ts1.trunc, dim=ts1.dim)
 
 
 @jax.jit
-def shuffle_pow(ts: TensorSequenceJAX, p: int, shuffle_table: jax.Array) -> TensorSequenceJAX:
+def shuffle_pow(ts: TensorSequence, p: int, shuffle_table: jax.Array) -> TensorSequence:
     """
     Raises the TensorSequence to a shuffle power p.
 
@@ -55,7 +55,7 @@ def shuffle_pow(ts: TensorSequenceJAX, p: int, shuffle_table: jax.Array) -> Tens
 
 
 @jax.jit
-def shuffle_exp(ts: TensorSequenceJAX, N_trunc: int, shuffle_table: jax.Array) -> TensorSequenceJAX:
+def shuffle_exp(ts: TensorSequence, N_trunc: int, shuffle_table: jax.Array) -> TensorSequence:
     """
     Computes the shuffle exponential of the TensorSequence up to a specified truncation level.
 

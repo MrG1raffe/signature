@@ -5,7 +5,11 @@ from .words import (word_len, number_of_words_up_to_trunc, index_to_word_len, in
                     word_to_base_dim_number, word_to_base_dim_number_vect, word_to_index, word_to_index_vect)
 from .factory import zero, zero_like, unit, unit_like, from_word, from_dict, from_array
 from .shuffle_table import get_shuffle_table
-from .shuffle_product import shuffle_prod, shuffle_pow, shuffle_exp
+from .shuffle_product import shuffle_prod, shuffle_prod_2d, shuffle_pow, shuffle_exp
 from .tensor_product import tensor_prod_word, tensor_prod, tensor_pow, tensor_exp, resolvent
 from .algebra_basis import AlgebraBasis
 from .path_signature import path_to_signature, path_to_stationary_signature
+from .expected_signature import expected_bm_signature, expected_bm_stationary_signature
+from .operators import G, G_inv, G_resolvent, discount_ts, semi_integrated_scheme
+from .tensor_sequence import TensorSequence
+from .projection import proj

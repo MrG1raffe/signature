@@ -13,9 +13,9 @@ import matplotlib.pyplot as plt
 
 from signature.old_versions.tensor_sequence import TensorSequence
 from signature.old_versions.tensor_algebra import TensorAlgebra
-from ..expected_signature import expected_stationary_signature, expected_signature
-from ..stationary_signature import stationary_signature_from_path
-from ..utility import get_lengths_array
+from signature.old_versions.expected_signature import expected_stationary_signature, expected_signature
+from signature.old_versions.stationary_signature import stationary_signature_from_path
+from signature.old_versions.utility import get_lengths_array
 from ..signature_of_signature import get_signature_of_linear_form
 
 

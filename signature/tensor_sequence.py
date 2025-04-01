@@ -10,14 +10,10 @@ from .words import number_of_words_up_to_trunc, index_to_word, word_len, word_to
 
 
 @jdc.pytree_dataclass
-class TensorSequenceJAX:
+class TensorSequence:
     array: jax.Array
     trunc: int
     dim: int
-
-    # def __post_init__(self):
-    #     if self.array.shape[0] != number_of_words_up_to_trunc(trunc=self.trunc, dim=self.dim):
-    #         raise ValueError("The array's shape should be consistent with given `trunc` and `dim` values.")
 
     def __repr__(self):
         return str(self.array)
@@ -56,18 +52,18 @@ class TensorSequenceJAX:
         return self.array[key]
 
     def subsequence(self, key: Tuple):
-        return TensorSequenceJAX(array=self.array[(slice(None), *key)], trunc=self.trunc, dim=self.dim)
+        return TensorSequence(array=self.array[(slice(None), *key)], trunc=self.trunc, dim=self.dim)
 
-    def __rmul__(self, c: Union[float, complex, jax.Array]) -> TensorSequenceJAX:
+    def __rmul__(self, c: Union[float, complex, jax.Array]) -> TensorSequence:
         """
         Performs right multiplication of the TensorSequence by a scalar or a numpy array.
 
         :param c: A scalar or numpy array by which to multiply the TensorSequence.
         :return: A new TensorSequence that is the result of the multiplication.
         """
-        return TensorSequenceJAX(array=self.array * c, trunc=self.trunc, dim=self.dim)
+        return TensorSequence(array=self.array * c, trunc=self.trunc, dim=self.dim)
 
-    def __mul__(self, c: Union[float, complex, jax.Array]) -> TensorSequenceJAX:
+    def __mul__(self, c: Union[float, complex, jax.Array]) -> TensorSequence:
         """
         Performs left multiplication of the TensorSequence by a scalar or a numpy array
         of shape (self.__array.shape[0], 1).
@@ -86,25 +82,25 @@ class TensorSequenceJAX:
         """
         return self * (1 / c)
 
-    def __add__(self, ts: TensorSequenceJAX) -> TensorSequenceJAX:
+    def __add__(self, ts: TensorSequence) -> TensorSequence:
         """
         Adds another TensorSequence to the current one.
 
         :param ts: The TensorSequence to add.
         :return: A new TensorSequence that is the result of the addition.
         """
-        return TensorSequenceJAX(array=self.array + ts.array, trunc=jnp.maximum(self.trunc, ts.trunc), dim=self.dim)
+        return TensorSequence(array=self.array + ts.array, trunc=jnp.maximum(self.trunc, ts.trunc), dim=self.dim)
 
-    def __sub__(self, ts: TensorSequenceJAX) -> TensorSequenceJAX:
+    def __sub__(self, ts: TensorSequence) -> TensorSequence:
         """
         Subtracts another TensorSequence from the current one.
 
         :param ts: The TensorSequence to subtract.
         :return: A new TensorSequence that is the result of the subtraction.
         """
-        return TensorSequenceJAX(array=self.array - ts.array, trunc=jnp.maximum(self.trunc, ts.trunc), dim=self.dim)
+        return TensorSequence(array=self.array - ts.array, trunc=jnp.maximum(self.trunc, ts.trunc), dim=self.dim)
 
-    def __matmul__(self, ts: TensorSequenceJAX) -> Union[float, jax.Array]:
+    def __matmul__(self, ts: TensorSequence) -> Union[float, jax.Array]:
         """
         Computes the inner product (dot product) of the current TensorSequence with another.
 
@@ -124,7 +120,7 @@ class TensorSequenceJAX:
         return self.array.shape
 
     @jax.jit
-    def proj(self, word: int) -> TensorSequenceJAX:
+    def proj(self, word: int) -> TensorSequence:
         """
         Calculates the projection of TensorSequence with respect to the given word.
 
@@ -149,7 +145,7 @@ class TensorSequenceJAX:
         array = array.at[new_indices].set(jnp.where(jnp.einsum("i..., i -> i...", jnp.ones_like(self.array), indices_mask),
                                                     jnp.einsum("i..., i -> i...", self.array, indices_mask), 0))
 
-        return TensorSequenceJAX(array=array, trunc=self.trunc, dim=self.dim)
+        return TensorSequence(array=array, trunc=self.trunc, dim=self.dim)
 
     def plot(self, trunc: int = None, ax: plt.axis = None, **kwargs) -> None:
         """

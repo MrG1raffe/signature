@@ -8,7 +8,7 @@ import numba as nb
 
 from signature.old_versions.alphabet import Alphabet
 from signature.old_versions.shuffle import shuffle_product
-from signature.jax_signature.numba_utility import factorial
+from signature.numba_utility import factorial
 
 spec = [
     ('__alphabet', Alphabet.class_type.instance_type),

@@ -1,11 +1,13 @@
 import jax
 import jax.numpy as jnp
+import jax.scipy.special as jsp
 import iisignature
 
-from .tensor_sequence_jax import  TensorSequenceJAX
+from .tensor_sequence import  TensorSequence
 from .operators import discount_ts
 from .tensor_product import tensor_exp, tensor_prod
 from .factory import from_array
+from .words import number_of_words_up_to_trunc
 
 
 def __2d_path_to_array(path: jax.Array, trunc: int) -> jax.Array:
@@ -24,7 +26,7 @@ def __2d_path_to_array(path: jax.Array, trunc: int) -> jax.Array:
     return array
 
 
-def path_to_signature(path: jax.Array, trunc: int) -> TensorSequenceJAX:
+def path_to_signature(path: jax.Array, trunc: int) -> TensorSequence:
     """
     Converts a path into a TensorSequence by computing its signature up to a given truncation level.
 
@@ -43,10 +45,10 @@ def path_to_signature(path: jax.Array, trunc: int) -> TensorSequenceJAX:
             array = array.at[:, :, i].set(__2d_path_to_array(path=path[:, :, i], trunc=trunc))
     else:
         raise ValueError("Dimension of path should be less than 3.")
-    return TensorSequenceJAX(array=array, trunc=trunc, dim=path.shape[1])
+    return TensorSequence(array=array, trunc=trunc, dim=path.shape[1])
 
 
-def path_to_stationary_signature(path: jax.Array, trunc: int, t_grid: jax.Array, lam: float) -> TensorSequenceJAX:
+def path_to_stationary_signature(path: jax.Array, trunc: int, t_grid: jax.Array, lam: float) -> TensorSequence:
     """
     Computes the stationary signature with coefficient lam corresponding to a given d-dimensional path on the
     time grid t_grid up to the order trunc.
@@ -64,24 +66,42 @@ def path_to_stationary_signature(path: jax.Array, trunc: int, t_grid: jax.Array,
     dX = jnp.diff(path, axis=0, prepend=path[0:1, :])
     dt = jnp.diff(t_grid, prepend=t_grid[0])
 
-    dX_ts = from_array(array=jnp.vstack([jnp.zeros(dX.shape[0]), dX.T]), trunc=trunc, dim=dim)
-    acc_array = chen_cum_prod_stat(dX_ts, dt, trunc, lam, dim)
-    return TensorSequenceJAX(array=acc_array[:, t_grid >= 0], trunc=trunc, dim=dim)
+    #dX_ts = from_array(array=jnp.vstack([jnp.zeros(dX.shape[0]), dX.T]), trunc=trunc, dim=dim)
+
+    c = jnp.where(dt > 0, (1 - jnp.exp(-lam * dt)) / (lam * dt), 1).reshape((-1, 1))
+    path_inc = dX * c
+
+    n_indices = number_of_words_up_to_trunc(trunc, dim=dim)
+    dX_sig_array = jnp.zeros((n_indices, t_grid.size))
+    dX_sig_array = dX_sig_array.at[0].set(1)
+
+    # Calculates step arrays: each array array_steps[:, k] corresponds to the signature bb{X}_{t_k, t_{k + 1}}.
+    # n-th level of this signature is the tensor product of the path increments path[k + 1] - path[k] multiplied
+    # by a signature of the linear path given by the function __h.
+    tp_n = path_inc
+    for n in range(1, trunc + 1):
+        idx_start = number_of_words_up_to_trunc(n - 1, dim=dim)
+        dX_sig_array = dX_sig_array.at[idx_start:idx_start + dim ** n].set(tp_n.T / jsp.factorial(n))
+        tp_n = jnp.einsum("ij,ik->ijk", tp_n, path_inc).reshape((path_inc.shape[0], -1))
+
+    # A more efficient application of tensor_exp(e_1 + e_2 + ... + e_d)
+    dX_sig = TensorSequence(array=dX_sig_array, trunc=trunc, dim=dim)
+
+    acc_array = chen_cum_prod_stat(dX_sig, dt, trunc, lam, dim)
+
+    return TensorSequence(array=acc_array[:, t_grid >= 0], trunc=trunc, dim=dim)
 
 
 @jax.jit
-def chen_cum_prod_stat(dX_ts, dt, trunc, lam, dim) -> jax.Array:
+def chen_cum_prod_stat(dX_sig, dt, trunc, lam, dim) -> jax.Array:
     """
     Transforms the signature bb{X}_{t_k, t_{k + 1}} of linear paths into the signature bb{X}_{t_{k + 1}}
     using the Chen's identity.
     """
-    c = jnp.where(dt > 0, (1 - jnp.exp(-lam * dt)) / (lam * dt), 1)
-    dX_sig = tensor_exp(dX_ts * c, N_trunc=trunc)
-
-    def f(carry, x: TensorSequenceJAX):
+    def f(carry, x: TensorSequence):
         dt_step, dx_arr = x
-        result_array = tensor_prod(discount_ts(TensorSequenceJAX(carry, trunc=trunc, dim=dim), dt=dt_step, lam=lam),
-                                      TensorSequenceJAX(dx_arr, trunc=trunc, dim=dim)).array
+        result_array = tensor_prod(discount_ts(TensorSequence(carry, trunc=trunc, dim=dim), dt=dt_step, lam=lam),
+                                   TensorSequence(dx_arr, trunc=trunc, dim=dim)).array
         return result_array, result_array
 
     init = jnp.zeros(len(dX_sig))

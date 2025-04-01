@@ -1,32 +1,32 @@
 import jax
 import jax.numpy as jnp
 
-from .tensor_sequence_jax import TensorSequenceJAX
+from .tensor_sequence import TensorSequence
 from .words import number_of_words_up_to_trunc, word_to_index
 
 
 @jax.jit
-def zero_like(ts: TensorSequenceJAX) -> TensorSequenceJAX:
+def zero_like(ts: TensorSequence) -> TensorSequence:
     """
     Creates an instance of TensorSequenceJAX with no indices and the same sizes of other axis.
 
     :return: A new zero TensorSequenceJAX.
     """
-    return TensorSequenceJAX(array=jnp.zeros_like(ts.array), trunc=ts.trunc, dim=ts.dim)
+    return TensorSequence(array=jnp.zeros_like(ts.array), trunc=ts.trunc, dim=ts.dim)
 
 
 @jax.jit
-def unit_like(ts: TensorSequenceJAX) -> TensorSequenceJAX:
+def unit_like(ts: TensorSequence) -> TensorSequence:
     """
     Creates an instance of TensorSequenceJAX with index 1 corresponding to the word Ø.
 
     :return: A unit element as TensorSequenceJAX.
     """
     array = jnp.zeros_like(ts.array)
-    return TensorSequenceJAX(array=array.at[0].set(1), trunc=ts.trunc, dim=ts.dim)
+    return TensorSequence(array=array.at[0].set(1), trunc=ts.trunc, dim=ts.dim)
 
 
-def zero(trunc: int, dim: int) -> TensorSequenceJAX:
+def zero(trunc: int, dim: int) -> TensorSequence:
     """
     Creates an instance of TensorSequenceJAX with no indices and the same sizes of other axis.
 
@@ -36,10 +36,10 @@ def zero(trunc: int, dim: int) -> TensorSequenceJAX:
     :return: A new zero TensorSequenceJAX.
     """
     array = jnp.zeros(number_of_words_up_to_trunc(trunc=trunc, dim=dim))
-    return TensorSequenceJAX(array=array, trunc=trunc, dim=dim)
+    return TensorSequence(array=array, trunc=trunc, dim=dim)
 
 
-def unit(trunc: int, dim: int) -> TensorSequenceJAX:
+def unit(trunc: int, dim: int) -> TensorSequence:
     """
     Creates an instance of TensorSequenceJAX with index 1 corresponding to the word Ø.
 
@@ -49,10 +49,10 @@ def unit(trunc: int, dim: int) -> TensorSequenceJAX:
     :return: A unit element as TensorSequenceJAX.
     """
     array = jnp.zeros(number_of_words_up_to_trunc(trunc=trunc, dim=dim))
-    return TensorSequenceJAX(array=array.at[0].set(1), trunc=trunc, dim=dim)
+    return TensorSequence(array=array.at[0].set(1), trunc=trunc, dim=dim)
 
 
-def from_word(word: int, trunc: int, dim: int) -> TensorSequenceJAX:
+def from_word(word: int, trunc: int, dim: int) -> TensorSequence:
     """
     Creates a TensorSequence from a given word and a truncation level.
 
@@ -63,10 +63,10 @@ def from_word(word: int, trunc: int, dim: int) -> TensorSequenceJAX:
     """
     index = word_to_index(word=word, dim=dim)
     array = jnp.zeros(number_of_words_up_to_trunc(trunc=trunc, dim=dim))
-    return TensorSequenceJAX(array=array.at[index].set(1), trunc=trunc, dim=dim)
+    return TensorSequence(array=array.at[index].set(1), trunc=trunc, dim=dim)
 
 
-def from_dict(word_dict: dict, trunc: int, dim: int) -> TensorSequenceJAX:
+def from_dict(word_dict: dict, trunc: int, dim: int) -> TensorSequence:
     """
     Creates a TensorSequence from a given word dictionary and a truncation level.
 
@@ -91,10 +91,10 @@ def from_dict(word_dict: dict, trunc: int, dim: int) -> TensorSequenceJAX:
         array = jnp.zeros((n_elem,) + values.shape[1:])
         array = array.at[indices].set(values)
 
-    return TensorSequenceJAX(array=array, trunc=trunc, dim=dim)
+    return TensorSequence(array=array, trunc=trunc, dim=dim)
 
 
-def from_array(array: jax.Array, trunc: int, dim: int) -> TensorSequenceJAX:
+def from_array(array: jax.Array, trunc: int, dim: int) -> TensorSequence:
     """
     Creates a TensorSequence from a given array and (optionally) indices. If indices are not given, takes the
     indices of the first elements of the tensor algebra.
@@ -108,4 +108,4 @@ def from_array(array: jax.Array, trunc: int, dim: int) -> TensorSequenceJAX:
     array_ts = jnp.zeros((number_of_words_up_to_trunc(trunc=trunc, dim=dim),) + array.shape[1:])
     array_ts = array_ts.at[jnp.arange(array.shape[0])].set(array)
 
-    return TensorSequenceJAX(array=array_ts, trunc=trunc, dim=dim)
+    return TensorSequence(array=array_ts, trunc=trunc, dim=dim)
