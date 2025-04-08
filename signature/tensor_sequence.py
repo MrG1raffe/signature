@@ -6,7 +6,8 @@ import numpy as np
 from typing import Union, Tuple
 import matplotlib.pyplot as plt
 
-from .words import number_of_words_up_to_trunc, index_to_word, word_len, word_to_index, index_to_word_len
+from .words import (number_of_words_up_to_trunc, index_to_word, word_len, word_to_index,
+                    index_to_word_len, index_to_lam_sum_vect)
 
 
 @jdc.pytree_dataclass
@@ -175,3 +176,7 @@ class TensorSequence:
     @jax.jit
     def get_lengths_array(self) -> jax.Array:
         return index_to_word_len(index=jnp.arange(len(self)), dim=self.dim)
+
+    @jax.jit
+    def get_lambdas_sum_array(self, lam: jax.Array) -> jax.Array:
+        return index_to_lam_sum_vect(jnp.arange(len(self)), self.dim, lam)

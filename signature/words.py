@@ -65,6 +65,31 @@ def index_to_word(index: int, dim: int) -> jnp.int64:
     res, _ = lax.fori_loop(lower=0, upper=length, body_fun=body_fun, init_val=jnp.array((0, index), dtype=jnp.int64))
     return res
 
+@jax.jit
+def index_to_lam_sum(index: int, dim: int, lam: jax.Array) -> jnp.int64:
+    """
+    Converts an index back to the sum of lambda_i over all letters i in the word corresponding to the index.
+
+    :param dim: the base dimension.
+    :param index: An integer representing the index to convert.
+    :param lam: A vector of coefficients lambda.
+    :return: An integer representing the word corresponding to the given index.
+    """
+    length = jnp.floor(jnp.log2(index * (dim - 1) + 1) / jnp.log2(dim) + 1e-10).astype(jnp.int64)
+    index = index - (dim ** length - 1) // (dim - 1)
+
+    def body_fun(i, state):
+        res_tmp, index_inner = state
+        p = dim ** (length - 1 - i)
+        digit = index_inner // p
+        index_inner = index_inner % p
+        res_tmp += lam[digit]
+        return jnp.array((res_tmp, index_inner), dtype=jnp.int64)
+
+    # Initial state is (0, index)
+    res, _ = lax.fori_loop(lower=0, upper=length, body_fun=body_fun, init_val=jnp.array((0, index), dtype=jnp.int64))
+    return res
+
 
 @jax.jit
 def word_to_base_dim_number(word: int, dim: int) -> int:
@@ -107,3 +132,4 @@ def word_to_index(word: int, dim: int) -> int:
 word_to_base_dim_number_vect = jax.jit(jax.vmap(word_to_base_dim_number, in_axes=(0, None)))
 word_to_index_vect = jax.jit(jax.vmap(word_to_index, in_axes=(0, None)))
 index_to_word_vect = jax.jit(jax.vmap(index_to_word, in_axes=(0, None)))
+index_to_lam_sum_vect = jax.jit(jax.vmap(index_to_lam_sum, in_axes=(0, None, None)))

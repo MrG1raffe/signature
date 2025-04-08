@@ -24,7 +24,7 @@ def expected_bm_signature(t: Union[float, jax.Array], trunc: int) -> TensorSeque
     return tensor_exp(ts=w, N_trunc=trunc)
 
 
-def expected_bm_stationary_signature(trunc: int, lam: float, t: float = None, n_points: int = 100) -> TensorSequence:
+def expected_bm_stationary_signature(trunc: int, lam: jax.Array, t: float = None, n_points: int = 100) -> TensorSequence:
     """
     Computes expected stationary lambda-signature of X_t = (t, W_t). If t is not specified,
     computes stationary expected signature E^lam = E[SigX^lam]. Otherwise, computes E_t^lam = E[SigX_{0, t}^lam].
@@ -44,7 +44,7 @@ def expected_bm_stationary_signature(trunc: int, lam: float, t: float = None, n_
         res = unit(trunc, dim)
         v = unit(trunc, dim)
         for _ in range(trunc):
-            v = G_inv(tensor_prod(v, w)) / lam
+            v = G_inv(tensor_prod(v, w))
             res = res + v
         return res
     else:

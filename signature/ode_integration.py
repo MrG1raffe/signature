@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from typing import Callable
 from .tensor_sequence import TensorSequence
-from .operators import discount_ts, semi_integrated_scheme
+from .operators import D, semi_integrated_scheme
 
 from functools import partial
 
@@ -46,14 +46,14 @@ def ode_solver_traj(
 
 @partial(jax.jit, static_argnames=['fun'])
 def step_fun_semi_int_euler(psi: TensorSequence, dt: float, fun: Callable, args: dict) -> TensorSequence:
-    return discount_ts(ts=psi, dt=dt, lam=args["lam"]) + semi_integrated_scheme(ts=fun(psi, args), dt=dt, lam=args["lam"])
+    return D(ts=psi, dt=dt, lam=args["lam"]) + semi_integrated_scheme(ts=fun(psi, args), dt=dt, lam=args["lam"])
 
 
 @partial(jax.jit, static_argnames=['fun'])
 def step_fun_semi_int_pece(psi: TensorSequence, dt: float, fun: Callable, args: dict) -> TensorSequence:
     fun_psi = fun(psi, args)
-    psi_pred = discount_ts(ts=psi, dt=dt, lam=args["lam"]) + semi_integrated_scheme(ts=fun_psi, dt=dt, lam=args["lam"])
-    psi_next = discount_ts(ts=psi, dt=dt, lam=args["lam"]) + \
+    psi_pred = D(ts=psi, dt=dt, lam=args["lam"]) + semi_integrated_scheme(ts=fun_psi, dt=dt, lam=args["lam"])
+    psi_next = D(ts=psi, dt=dt, lam=args["lam"]) + \
                semi_integrated_scheme(ts=(fun(psi_pred, args) + fun_psi) * 0.5, dt=dt, lam=args["lam"])
     return psi_next
 
@@ -64,7 +64,7 @@ def step_fun_semi_int_rk4(psi: TensorSequence, dt: float, fun: Callable, args: d
     k2 = fun(psi + k1 * (dt / 2), args)
     k3 = fun(psi + k2 * (dt / 2), args)
     k4 = fun(psi + k3 * dt, args)
-    psi_next = discount_ts(ts=psi, dt=dt, lam=args["lam"]) + \
+    psi_next = D(ts=psi, dt=dt, lam=args["lam"]) + \
                semi_integrated_scheme(ts=(k1 + k2 * 2 + k3 * 2 + k4) / 6, dt=dt, lam=args["lam"])
     return psi_next
 
