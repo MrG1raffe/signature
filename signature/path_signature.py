@@ -1,5 +1,7 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
+from numpy.typing import NDArray
 import jax.scipy.special as jsp
 import iisignature
 
@@ -9,7 +11,7 @@ from .tensor_product import tensor_prod
 from .words import number_of_words_up_to_trunc
 
 
-def __2d_path_to_array(path: jax.Array, trunc: int) -> jax.Array:
+def __2d_path_to_array(path: jax.Array, trunc: int) -> NDArray:
     """
     Converts a two-dimensional path into a two-dimensional array to be used to create the TensorSequence.
 
@@ -19,8 +21,8 @@ def __2d_path_to_array(path: jax.Array, trunc: int) -> jax.Array:
     :return: A TensorSequence representing the signature of the path up to the specified truncation level.
     """
     array = iisignature.sig(path, trunc, 2)
-    array = jnp.vstack([jnp.zeros(array.shape[1]), array])
-    array = jnp.hstack([jnp.ones((array.shape[0], 1)), array])
+    array = np.vstack([np.zeros(array.shape[1]), array])
+    array = np.hstack([np.ones((array.shape[0], 1)), array])
     array = array.T
     return array
 
@@ -39,12 +41,13 @@ def path_to_signature(path: jax.Array, trunc: int) -> TensorSequence:
     elif path.ndim == 2:
         array = __2d_path_to_array(path=path, trunc=trunc)
     elif path.ndim == 3:
-        array = jnp.zeros((2 ** (trunc + 1) - 1, path.shape[0], path.shape[2]))
+        dim = path.shape[1]
+        array = np.zeros((number_of_words_up_to_trunc(trunc=trunc, dim=dim), path.shape[0], path.shape[2]))
         for i in range(path.shape[2]):
-            array = array.at[:, :, i].set(__2d_path_to_array(path=path[:, :, i], trunc=trunc))
+            array[:, :, i] = __2d_path_to_array(path=path[:, :, i], trunc=trunc)
     else:
         raise ValueError("Dimension of path should be less than 3.")
-    return TensorSequence(array=array, trunc=trunc, dim=path.shape[1])
+    return TensorSequence(array=jnp.array(array), trunc=trunc, dim=path.shape[1])
 
 
 def path_to_stationary_signature(path: jax.Array, trunc: int, t_grid: jax.Array, lam: jax.Array) -> TensorSequence:
@@ -87,6 +90,8 @@ def path_to_stationary_signature(path: jax.Array, trunc: int, t_grid: jax.Array,
         idx_start = number_of_words_up_to_trunc(n - 1, dim=dim)
         dX_sig_array = dX_sig_array.at[idx_start:idx_start + dim ** n].set(tp_n.T / jsp.factorial(n))
         tp_n = jnp.einsum("ij,ik->ijk", tp_n, path_inc).reshape((path_inc.shape[0], -1))
+
+    # TODO: multiply dX_sig_array by the signature of linear path
 
     # A more efficient computation of tensor_exp(e_1 + e_2 + ... + e_d)
     dX_sig = TensorSequence(array=dX_sig_array, trunc=trunc, dim=dim)

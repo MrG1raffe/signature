@@ -34,7 +34,7 @@ def shuffle_prod(ts1: TensorSequence, ts2: TensorSequence, shuffle_table: jax.Ar
 def shuffle_prod_2d(ts1: TensorSequence, ts2: TensorSequence, shuffle_table: jax.Array) -> TensorSequence:
     return TensorSequence(array=_shuffle_prod_arr_vect(ts1.array.reshape((len(ts1), -1)),
                                                        ts2.array.reshape((len(ts2), -1)),
-                                                       shuffle_table),
+                                                       shuffle_table).reshape(ts1.shape),
                           trunc=ts1.trunc, dim=ts1.dim)
 
 
