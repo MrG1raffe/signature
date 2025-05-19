@@ -4,11 +4,12 @@ import numpy as np
 from numpy.typing import NDArray
 import jax.scipy.special as jsp
 import iisignature
+from functools import partial
 
 from .tensor_sequence import TensorSequence
 from .operators import D
 from .tensor_product import tensor_prod
-from .words import number_of_words_up_to_trunc
+from .words import number_of_words_up_to_trunc, index_to_word_vect
 
 
 def __2d_path_to_array(path: jax.Array, trunc: int) -> NDArray:
@@ -50,7 +51,14 @@ def path_to_signature(path: jax.Array, trunc: int) -> TensorSequence:
     return TensorSequence(array=jnp.array(array), trunc=trunc, dim=path.shape[1])
 
 
-def path_to_stationary_signature(path: jax.Array, trunc: int, t_grid: jax.Array, lam: jax.Array) -> TensorSequence:
+def path_to_fm_signature(path: jax.Array, trunc: int, t_grid: jax.Array, lam: jax.Array) -> TensorSequence:
+    if len(lam) == 1 or np.allclose(lam, lam[0]):
+        return __path_to_fm_signature_const_lam(path, trunc, t_grid, lam)
+    else:
+        return __path_to_fm_signature_vector_lam(path, trunc, t_grid, lam)
+
+
+def __path_to_fm_signature_const_lam(path: jax.Array, trunc: int, t_grid: jax.Array, lam: jax.Array) -> TensorSequence:
     """
     Computes the stationary signature with coefficient lam corresponding to a given d-dimensional path on the
     time grid t_grid up to the order trunc.
@@ -91,7 +99,56 @@ def path_to_stationary_signature(path: jax.Array, trunc: int, t_grid: jax.Array,
         dX_sig_array = dX_sig_array.at[idx_start:idx_start + dim ** n].set(tp_n.T / jsp.factorial(n))
         tp_n = jnp.einsum("ij,ik->ijk", tp_n, path_inc).reshape((path_inc.shape[0], -1))
 
-    # TODO: multiply dX_sig_array by the signature of linear path
+    # A more efficient computation of tensor_exp(e_1 + e_2 + ... + e_d)
+    dX_sig = TensorSequence(array=dX_sig_array, trunc=trunc, dim=dim)
+
+    acc_array = chen_cum_prod_stat(dX_sig, dt, trunc, lam, dim)
+
+    return TensorSequence(array=acc_array[:, t_grid >= 0], trunc=trunc, dim=dim)
+
+
+def __path_to_fm_signature_vector_lam(path: jax.Array, trunc: int, t_grid: jax.Array, lam: jax.Array) -> TensorSequence:
+    """
+    Computes the stationary signature with coefficient lam corresponding to a given d-dimensional path on the
+    time grid t_grid up to the order trunc.
+
+    :param path: Path as jax.Array of shape (len(t_grid), d).
+    :param trunc: Truncation order, i.e. maximal order of coefficients to be calculated.
+    :param t_grid: Time grid as jax.Array. An increasing time grid from T0 < 0 to T > 0. The signature is calculated
+        only for the positive values of grid.
+    :param lam: a vector of signature mean reversion coefficients.
+
+    :return: TensorSequence objet corresponding to a trajectory of signature of the path on t_grid corresponding
+        to the positive values t_grid[t_grid >= 0]
+    """
+    dim = path.shape[1]
+
+    if len(lam) == 1:
+        lam = jnp.ones(dim) * lam
+
+    dt = jnp.diff(t_grid, prepend=t_grid[0])
+    dX = jnp.where(dt[:, None] * np.ones(dim) != 0, jnp.diff(path, axis=0, prepend=path[0:1, :]) / dt[:, None], 0)
+
+    n_indices = number_of_words_up_to_trunc(trunc, dim=dim)
+    words = index_to_word_vect(jnp.arange(n_indices), dim)
+    dX_sig_array = np.zeros((n_indices, t_grid.size), dtype=float)
+    dX_sig_array[0] = 1
+
+    # Calculates step arrays: each array array_steps[:, k] corresponds to the signature bb{X}_{t_k, t_{k + 1}}.
+    # n-th level of this signature is the tensor product of the path increments path[k + 1] - path[k] multiplied
+    # by a signature of the linear path given by the function __h.
+    tp_n = dX
+    for n in range(1, trunc + 1):
+        idx_start = number_of_words_up_to_trunc(n - 1, dim=dim)
+        dX_sig_array[idx_start:idx_start + dim ** n] = tp_n.T
+        tp_n = jnp.einsum("ij,ik->ijk", tp_n, dX).reshape((dX.shape[0], -1))
+
+    # Computes the FM-signature of linear path word by word.
+    for i, word in enumerate(words):
+        if i > 0:
+            word_as_indices = jnp.array([int(letter) - 1 for letter in str(word)])
+            lam_word = lam[word_as_indices]
+            dX_sig_array[i] *= fm_sig_from_word(dt, lam_word)
 
     # A more efficient computation of tensor_exp(e_1 + e_2 + ... + e_d)
     dX_sig = TensorSequence(array=dX_sig_array, trunc=trunc, dim=dim)
@@ -119,3 +176,11 @@ def chen_cum_prod_stat(dX_sig, dt, trunc, lam, dim) -> jax.Array:
     _, ys = jax.lax.scan(f=f, init=init, xs=(dt, dX_sig.array.T))
 
     return ys.T
+
+@jax.jit
+@partial(jax.vmap, in_axes=(0, None))
+def fm_sig_from_word(dt, lambda_word):
+    mu = jnp.concatenate([jnp.zeros(1), jnp.cumsum(lambda_word)])
+    mu_diff = mu[:, None] - mu[None, :]
+    c = jnp.prod(jnp.where(mu_diff == 0, 1, 1 / mu_diff), axis=0)
+    return jnp.exp(-mu * dt) @ c
