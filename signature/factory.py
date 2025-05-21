@@ -105,7 +105,7 @@ def from_array(array: jax.Array, trunc: int, dim: int) -> TensorSequence:
 
     :return: A TensorSequence constructed from the provided array and indices.
     """
-    array_ts = jnp.zeros((number_of_words_up_to_trunc(trunc=trunc, dim=dim),) + array.shape[1:])
+    array_ts = jnp.zeros((number_of_words_up_to_trunc(trunc=trunc, dim=dim),) + array.shape[1:], dtype=array.dtype)
     array_ts = array_ts.at[jnp.arange(array.shape[0])].set(array)
 
     return TensorSequence(array=array_ts, trunc=trunc, dim=dim)

@@ -52,7 +52,8 @@ def path_to_signature(path: jax.Array, trunc: int) -> TensorSequence:
 
 
 def path_to_fm_signature(path: jax.Array, trunc: int, t_grid: jax.Array, lam: jax.Array) -> TensorSequence:
-    if len(lam) == 1 or np.allclose(lam, lam[0]):
+    lam = jnp.array(lam)
+    if lam.size == 1 or np.allclose(lam, lam[0]):
         return __path_to_fm_signature_const_lam(path, trunc, t_grid, lam)
     else:
         return __path_to_fm_signature_vector_lam(path, trunc, t_grid, lam)
@@ -74,7 +75,7 @@ def __path_to_fm_signature_const_lam(path: jax.Array, trunc: int, t_grid: jax.Ar
     """
     dim = path.shape[1]
 
-    if len(lam) == 1:
+    if lam.size == 1:
         lam = jnp.ones(dim) * lam
 
     dX = jnp.diff(path, axis=0, prepend=path[0:1, :])

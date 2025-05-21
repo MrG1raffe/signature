@@ -14,3 +14,4 @@ from .expected_signature import expected_bm_signature, expected_bm_stationary_si
 from .operators import G, G_inv, G_resolvent, D, semi_integrated_scheme
 from .tensor_sequence import TensorSequence
 from .projection import proj
+from .visualisation import plot_coefficients

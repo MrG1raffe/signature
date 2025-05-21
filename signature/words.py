@@ -80,14 +80,15 @@ def index_to_lam_sum(index: int, dim: int, lam: jax.Array) -> jnp.int64:
 
     def body_fun(i, state):
         res_tmp, index_inner = state
+        index_inner = jnp.int32(index_inner)
         p = dim ** (length - 1 - i)
         digit = index_inner // p
         index_inner = index_inner % p
         res_tmp += lam[digit]
-        return jnp.array((res_tmp, index_inner), dtype=jnp.int64)
+        return jnp.array((res_tmp, index_inner), dtype=float)
 
     # Initial state is (0, index)
-    res, _ = lax.fori_loop(lower=0, upper=length, body_fun=body_fun, init_val=jnp.array((0, index), dtype=jnp.int64))
+    res, _ = lax.fori_loop(lower=0, upper=length, body_fun=body_fun, init_val=jnp.array((0, index), dtype=float))
     return res
 
 
