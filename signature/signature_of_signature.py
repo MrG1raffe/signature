@@ -1,10 +1,10 @@
 import jax
 
-from signature.path_signature import TensorSequence
-from signature.words import number_of_words_up_to_trunc, index_to_word
-from signature.factory import unit
-from signature.tensor_product import tensor_prod_word
-from signature.shuffle_product import shuffle_prod
+from .path_signature import TensorSequence
+from .words import number_of_words_up_to_trunc, index_to_word
+from .factory import unit
+from .tensor_product import tensor_prod_word
+from .shuffle_product import shuffle_prod
 
 
 def get_signature_of_linear_form(ts: TensorSequence, trunc_moments: int, shuffle_table: jax.Array):

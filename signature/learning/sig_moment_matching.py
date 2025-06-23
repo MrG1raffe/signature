@@ -11,12 +11,14 @@ from math import factorial
 from simulation.diffusion import Diffusion
 import matplotlib.pyplot as plt
 
-from signature.old_versions.tensor_sequence import TensorSequence
-from signature.old_versions.tensor_algebra import TensorAlgebra
-from signature.old_versions.expected_signature import expected_stationary_signature, expected_signature
-from signature.old_versions.stationary_signature import stationary_signature_from_path
-from signature.old_versions.utility import get_lengths_array
+from ..shuffle_product import shuffle_prod
+from ..shuffle_table import get_shuffle_table
+from ..tensor_sequence import TensorSequence
+from ..expected_signature import expected_bm_stationary_signature, expected_bm_signature
+from ..path_signature import path_to_fm_signature, path_to_signature
 from ..signature_of_signature import get_signature_of_linear_form
+from ..words import number_of_words_up_to_trunc, index_to_word_vect, index_to_word
+from ..factory import from_array, unit
 
 
 class SigSignal:
@@ -26,9 +28,9 @@ class SigSignal:
     eSig: None # by default extended Brownian motion
     optimizer: str
 
+    shuffle_table = None
     l: TensorSequence = None
     words: List
-    ta: TensorAlgebra
     eSig: TensorSequence
     SigS: TensorSequence
 
@@ -44,24 +46,25 @@ class SigSignal:
         self.trunc_signature_moments = trunc_signature_moments
         self.optimizer = optimizer
 
-        self.ta = TensorAlgebra(dim=2, trunc=self.trunc * self.trunc_signature_moments)
+        # self.ta = TensorAlgebra(dim=2, trunc=self.trunc * self.trunc_signature_moments)
+        self.shuffle_table = get_shuffle_table(table_trunc=self.trunc * self.trunc_signature_moments, dim=2)
 
         if eSig is None:
-            self.eSig = expected_signature(t=T, trunc=self.trunc * self.trunc_signature_moments)
+            self.eSig = expected_bm_signature(t=T, trunc=self.trunc * self.trunc_signature_moments)
         else:
             self.eSig = eSig
 
-        n_moments = self.ta.alphabet.number_of_elements(self.trunc_signature_moments)
-        words = [self.ta.alphabet.index_to_word(idx) for idx in range(n_moments)]
+        n_moments = number_of_words_up_to_trunc(self.trunc_signature_moments, 2)
+        words = index_to_word_vect(np.arange(n_moments), 2)
         self.words = words
 
     def x_to_ts(self, x):
-        array = np.zeros(self.ta.alphabet.number_of_elements(self.trunc))
+        array = np.zeros(number_of_words_up_to_trunc(self.trunc, 2))
         array[1:] = x
-        return self.ta.from_array(trunc=self.trunc * self.trunc_signature_moments, array=array)
+        return from_array(trunc=self.trunc * self.trunc_signature_moments, array=array, dim=2)
 
     def fit(self, expected_signal_sig: TensorSequence):
-        x0 = np.zeros(self.ta.alphabet.number_of_elements(self.trunc) - 1)
+        x0 = np.zeros(number_of_words_up_to_trunc(self.trunc, 2) - 1)
 
         def callback(x, f=None, context=None, accept=None, convergence=None):
             val = self.loss(x, expected_signal_sig)
@@ -72,7 +75,7 @@ class SigSignal:
 
     def loss(self, x, expected_signal_sig):
         l = self.x_to_ts(x)
-        signal_sig_coefs = get_signature_of_linear_form(ts=l, trunc_moments=self.trunc_signature_moments, ta=self.ta)
+        signal_sig_coefs = get_signature_of_linear_form(ts=l, trunc_moments=self.trunc_signature_moments, shuffle_table=self.shuffle_table)
 
         loss = 0
         for word in self.words:
@@ -82,8 +85,6 @@ class SigSignal:
                 loss += loss_word * factorial(len(word))
 
         return loss
-
-
 
 
 class StatSigSignal:
@@ -97,8 +98,8 @@ class StatSigSignal:
     optimizer: str
     rng: np.random.Generator
 
+    shuffle_table = None
     l: TensorSequence = None
-    ta: TensorAlgebra
     eSSig: TensorSequence
     SigS: TensorSequence
 
@@ -123,11 +124,12 @@ class StatSigSignal:
         self.loss_weights = loss_weights
         self.optimizer = optimizer
 
-        self.ta = TensorAlgebra(dim=2, trunc=self.trunc * 2)
+        # self.ta = TensorAlgebra(dim=2, trunc=self.trunc * 2)
+        self.shuffle_table = get_shuffle_table(self.trunc * 2, dim=2)
 
         EPS = 1e-8
         n_t_past = 1000
-        t_past = np.linspace(np.log(2 * lam * EPS**2) / 2 / lam, 0, n_t_past)
+        t_past = np.linspace(np.log(2 * np.min(lam) * EPS**2) / 2 / np.min(lam), 0, n_t_past)
         t_grid_extended = np.concatenate([t_past[:-1] + t_grid[0], t_grid])
 
         if rng is None:
@@ -139,8 +141,8 @@ class StatSigSignal:
 
         brownian_motion = diffusion.brownian_motion()[0, 0, :]
         path = np.vstack([t_grid_extended, brownian_motion]).T
-        self.SigS = stationary_signature_from_path(path=path, trunc=self.trunc, t_grid=t_grid_extended - t_grid[0], lam=self.lam)
-        self.eSSig = expected_stationary_signature(trunc=self.trunc * 2, lam=lam)
+        self.SigS = path_to_fm_signature(path=path, trunc=self.trunc, t_grid=t_grid_extended - t_grid[0], lam=self.lam * np.ones(2))
+        self.eSSig = expected_bm_stationary_signature(trunc=self.trunc * self.trunc_signature_moments, lam=lam)
 
     def fit(self, signal: NDArray[float64]):
         signal_mean = np.mean(signal)
@@ -155,7 +157,7 @@ class StatSigSignal:
         for idx_start in range(num_of_win):
             path_signal[:, 1, idx_start] = normalized_signal[idx_start:idx_start + self.window_size]
 
-        SignalSig = self.ta.path_to_sequence(path=path_signal, trunc=self.trunc_signature_moments)
+        SignalSig = path_to_signature(path=path_signal, trunc=self.trunc_signature_moments)
         e_signal_sig = SignalSig.array[:, -1, :].mean(axis=1).real
 
         rng = np.random.default_rng(seed=42)
@@ -182,21 +184,21 @@ class StatSigSignal:
 
     def ts_from_x(self, x):
         mask = np.array([0, 2, 4, 6, 8, 10, 12, 14])
-        number_of_elements = self.ta.alphabet.number_of_elements(self.trunc)
+        number_of_elements = number_of_words_up_to_trunc(self.trunc, 2)
         array = np.zeros(number_of_elements)
         array[mask[mask < number_of_elements]] = x
-        return self.ta.from_array(trunc=self.trunc, array=array)
+        return from_array(trunc=self.trunc * self.trunc_signature_moments, array=array, dim=2)
 
     def normalize_ts(self, ts: TensorSequence, loc: float = 0, scale: float = 1):
         l_mean = (self.eSSig @ ts).squeeze().real
-        l_second_moment = (self.eSSig @ self.ta.shuop.shuffle_prod(ts, ts)).squeeze().real
+        l_second_moment = (self.eSSig @ shuffle_prod(ts, ts, self.shuffle_table)).squeeze().real
         l_std = np.sqrt(l_second_moment - l_mean ** 2)
 
         new_array = ts.array
-        new_array[0] += -l_mean
+        new_array.at[0].add(-l_mean)
         new_array = new_array / l_std * scale
-        new_array[0] += loc
-        return self.ta.from_array(trunc=self.trunc, array=new_array)
+        new_array.at[0].add(loc)
+        return from_array(trunc=self.trunc, array=new_array, dim=2)
 
     def empirical_expected_signal_sig(self, signal: NDArray[float64]):
         num_of_win = len(self.t_grid) - self.window_size
@@ -205,7 +207,7 @@ class StatSigSignal:
         for idx_start in range(num_of_win):
             path_signal[:, 1, idx_start] = signal[idx_start:idx_start + self.window_size]
 
-        SignalSig = self.ta.path_to_sequence(path=path_signal, trunc=self.trunc_signature_moments)
+        SignalSig = path_to_signature(path=path_signal, trunc=self.trunc_signature_moments)
 
         # possibly add a tensor normalization here
 
@@ -220,7 +222,7 @@ class StatSigSignal:
 
         signal_l_moments = (signal_l[:, None] ** np.arange(3, self.max_stationary_moment)).mean(axis=0)
 
-        weight_level = gamma(get_lengths_array(self.ta.alphabet, trunc=self.trunc_signature_moments) + 1)
+        weight_level = gamma(unit(trunc=self.trunc_signature_moments, dim=2).get_lengths_array() + 1)
         loss_esig = np.sqrt(np.mean(((e_signal_sig - e_signal_sig_l) * weight_level) ** 2)) * self.loss_weights[0]
         # print("loss:", ((e_signal_sig - e_signal_sig_l)) ** 2)
         # print("loss (weighted):", ((e_signal_sig - e_signal_sig_l) * weight_level) ** 2)

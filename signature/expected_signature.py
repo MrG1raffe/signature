@@ -44,7 +44,7 @@ def expected_bm_stationary_signature(trunc: int, lam: jax.Array, t: float = None
         res = unit(trunc, dim)
         v = unit(trunc, dim)
         for _ in range(trunc):
-            v = G_inv(tensor_prod(v, w))
+            v = G_inv(tensor_prod(v, w), lam)
             res = res + v
         return res
     else:
