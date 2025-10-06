@@ -96,30 +96,44 @@ def tensor_pow(ts: TensorSequence, p: int) -> TensorSequence:
 
 
 @jax.jit
-def tensor_exp(ts: TensorSequence, N_trunc: int) -> TensorSequence:
+def tensor_exp(ts: TensorSequence) -> TensorSequence:
     """
-    Computes the shuffle exponential of the TensorSequence up to a specified truncation level.
+    Computes the tensor exponential of the TensorSequence.
 
     :param ts:
-    :param N_trunc: The truncation level for the exponential.
     :return: A new TensorSequence representing the shuffle exponential.
     """
-    def body_fun(i, acc):
-        return acc + tensor_pow(ts=ts, p=i) / jsp.factorial(i)
+    x = ts - ts[0] * unit_like(ts)
 
-    return jax.lax.fori_loop(lower=1, upper=N_trunc + 1, body_fun=body_fun, init_val=unit_like(ts))
+    def body(n, carry):
+        ts_pow, fact, s = carry
+        ts_pow = tensor_prod(ts1=ts_pow, ts2=x)
+        fact = fact * n
+        s = s + ts_pow / fact
+        return (ts_pow, fact, s)
+
+    init = (unit_like(ts), 1.0, unit_like(ts))
+    ts_pow, fact, s = jax.lax.fori_loop(1, ts.trunc + 1, body, init)
+    return s * jnp.exp(ts[0])
 
 
-def resolvent(ts: TensorSequence, N_trunc) -> TensorSequence:
+@jax.jit
+def resolvent(ts: TensorSequence) -> TensorSequence:
     """
-    Computes the resolvent of the TensorSequence up to a specified truncation level.
+    Computes the resolvent of the TensorSequence.
     The resolvent is defined as the series of the TensorSequence's tensor powers.
 
     :param ts:
-    :param N_trunc: The truncation level for the resolvent.
     :return: A new TensorSequence representing the resolvent.
     """
-    def body_fun(i, acc):
-        return acc + tensor_pow(ts=ts, p=i)
+    x = (ts - ts[0] * unit_like(ts)) / (1 - ts[0])
 
-    return jax.lax.fori_loop(lower=1, upper=N_trunc + 1, body_fun=body_fun, init_val=unit_like(ts))
+    def body(n, carry):
+        ts_pow, s = carry
+        ts_pow = tensor_prod(ts1=ts_pow, ts2=x)
+        s = s + ts_pow
+        return (ts_pow, s)
+
+    init = (unit_like(ts), unit_like(ts))
+    ts_pow, s = jax.lax.fori_loop(1, ts.trunc + 1, body, init)
+    return s / (1 - ts[0])

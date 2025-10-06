@@ -6,7 +6,6 @@ from .operators import D, semi_integrated_scheme
 
 from functools import partial
 
-
 @partial(jax.jit, static_argnames=['fun', 'step_fun'])
 def ode_solver(
     fun: Callable,

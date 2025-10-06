@@ -55,17 +55,23 @@ def shuffle_pow(ts: TensorSequence, p: int, shuffle_table: jax.Array) -> TensorS
 
 
 @jax.jit
-def shuffle_exp(ts: TensorSequence, N_trunc: int, shuffle_table: jax.Array) -> TensorSequence:
+def shuffle_exp(ts: TensorSequence, shuffle_table: jax.Array) -> TensorSequence:
     """
-    Computes the shuffle exponential of the TensorSequence up to a specified truncation level.
+    Computes the shuffle exponential of the TensorSequence.
 
     :param ts:
-    :param N_trunc: The truncation level for the exponential.
     :param shuffle_table:
     :return: A new TensorSequence representing the shuffle exponential.
     """
+    x = ts - ts[0] * unit_like(ts)
 
-    def body_fun(i, acc):
-        return acc + shuffle_pow(ts=ts, p=i, shuffle_table=shuffle_table) / jsp.factorial(i)
+    def body(n, carry):
+        ts_pow, fact, s = carry
+        ts_pow = shuffle_prod(ts1=ts_pow, ts2=x, shuffle_table=shuffle_table)
+        fact = fact * n
+        s = s + ts_pow / fact
+        return (ts_pow, fact, s)
 
-    return jax.lax.fori_loop(lower=1, upper=N_trunc + 1, body_fun=body_fun, init_val=unit_like(ts))
+    init = (unit_like(ts), 1.0, unit_like(ts))
+    ts_pow, fact, s = jax.lax.fori_loop(1, ts.trunc + 1, body, init)
+    return s * jnp.exp(ts[0])

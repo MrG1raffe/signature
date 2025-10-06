@@ -137,8 +137,8 @@ class TensorSequence:
 
         # Compute new indices
         length_arr = index_to_word_len(indices, dim=self.dim)
-        new_indices = (indices - self.dim ** length_arr + 1) // self.dim ** word_length + \
-                      self.dim ** (length_arr - word_length) - 1
+        new_indices = jnp.where(self.dim == 1, indices - word_index, (indices - self.dim ** length_arr + 1) // self.dim ** word_length +
+                                self.dim ** (length_arr - word_length) - 1)
         # Set out-of-bounds index for non-valid ones
         new_indices = jnp.where(indices_mask, new_indices, len(self) + 1)
 

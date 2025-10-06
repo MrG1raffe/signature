@@ -25,7 +25,7 @@ def number_of_words_up_to_trunc(trunc: Union[int, jax.Array], dim: int):
     :param trunc: maximal word length.
     :return: Number of words v such that |v| <= trunc.
     """
-    return (dim ** (trunc + 1) - 1) // (dim - 1)
+    return jnp.maximum((dim ** (trunc + 1) - 1) // (dim - 1), trunc + 1)
 
 
 @jax.jit
@@ -38,7 +38,8 @@ def index_to_word_len(index: Union[int, jax.Array], dim: int) -> jax.Array:
     :return: An integer or array of integers representing the length of
              the word(s) corresponding to the given index/indices.
     """
-    return (jnp.log2(index * (dim - 1) + 1) / jnp.log2(dim) + 1e-10).astype(int)
+    index_word_len = jnp.where(dim == 1, index, jnp.log2(index * (dim - 1) + 1) / jnp.log2(dim) + 1e-10).astype(int)
+    return index_word_len
 
 
 @jax.jit
@@ -50,8 +51,8 @@ def index_to_word(index: int, dim: int) -> jnp.int64:
     :param index: An integer representing the index to convert.
     :return: An integer representing the word corresponding to the given index.
     """
-    length = jnp.floor(jnp.log2(index * (dim - 1) + 1) / jnp.log2(dim) + 1e-10).astype(jnp.int64)
-    index = index - (dim ** length - 1) // (dim - 1)
+    length = jnp.where(dim == 1, index, jnp.floor(jnp.log2(index * (dim - 1) + 1) / jnp.log2(dim) + 1e-10).astype(jnp.int64))
+    index = jnp.where(dim == 1, 0, index - (dim ** length - 1) // (dim - 1))
 
     def body_fun(i, state):
         res_tmp, index_inner = state
@@ -63,6 +64,7 @@ def index_to_word(index: int, dim: int) -> jnp.int64:
 
     # Initial state is (0, index)
     res, _ = lax.fori_loop(lower=0, upper=length, body_fun=body_fun, init_val=jnp.array((0, index), dtype=jnp.int64))
+
     return res
 
 @jax.jit
@@ -75,8 +77,8 @@ def index_to_lam_sum(index: int, dim: int, lam: jax.Array) -> jnp.int64:
     :param lam: A vector of coefficients lambda.
     :return: An integer representing the word corresponding to the given index.
     """
-    length = jnp.floor(jnp.log2(index * (dim - 1) + 1) / jnp.log2(dim) + 1e-10).astype(jnp.int64)
-    index = index - (dim ** length - 1) // (dim - 1)
+    length = jnp.where(dim == 1, index, jnp.floor(jnp.log2(index * (dim - 1) + 1) / jnp.log2(dim) + 1e-10).astype(jnp.int64))
+    index = jnp.where(dim == 1, 0, index - (dim ** length - 1) // (dim - 1))
 
     def body_fun(i, state):
         res_tmp, index_inner = state
