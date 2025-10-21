@@ -28,7 +28,7 @@ def __2d_path_to_array(path: jax.Array, trunc: int) -> NDArray:
     return array
 
 
-def path_to_signature(path: jax.Array, trunc: int) -> TensorSequence:
+def path_to_signature(path: jax.Array, trunc: int, only_terminal_sig: bool = False) -> TensorSequence:
     """
     Converts a path into a TensorSequence by computing its signature up to a given truncation level.
 
@@ -48,7 +48,10 @@ def path_to_signature(path: jax.Array, trunc: int) -> TensorSequence:
             array[:, :, i] = __2d_path_to_array(path=path[:, :, i], trunc=trunc)
     else:
         raise ValueError("Dimension of path should be less than 3.")
-    return TensorSequence(array=jnp.array(array), trunc=trunc, dim=path.shape[1])
+    if only_terminal_sig:
+        return TensorSequence(array=jnp.array(array[:, -1]), trunc=trunc, dim=path.shape[1])
+    else:
+        return TensorSequence(array=jnp.array(array), trunc=trunc, dim=path.shape[1])
 
 
 def path_to_fm_signature(path: jax.Array, trunc: int, t_grid: jax.Array, lam: jax.Array) -> TensorSequence:

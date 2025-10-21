@@ -51,6 +51,8 @@ def index_to_word(index: int, dim: int) -> jnp.int64:
     :param index: An integer representing the index to convert.
     :return: An integer representing the word corresponding to the given index.
     """
+    index = jnp.asarray(index, dtype=jnp.int64)
+    dim = jnp.asarray(dim, dtype=jnp.int64)
     length = jnp.where(dim == 1, index, jnp.floor(jnp.log2(index * (dim - 1) + 1) / jnp.log2(dim) + 1e-10).astype(jnp.int64))
     index = jnp.where(dim == 1, 0, index - (dim ** length - 1) // (dim - 1))
 
@@ -77,6 +79,8 @@ def index_to_lam_sum(index: int, dim: int, lam: jax.Array) -> jnp.int64:
     :param lam: A vector of coefficients lambda.
     :return: An integer representing the word corresponding to the given index.
     """
+    index = jnp.asarray(index, dtype=jnp.int64)
+    dim = jnp.asarray(dim, dtype=jnp.int64)
     length = jnp.where(dim == 1, index, jnp.floor(jnp.log2(index * (dim - 1) + 1) / jnp.log2(dim) + 1e-10).astype(jnp.int64))
     index = jnp.where(dim == 1, 0, index - (dim ** length - 1) // (dim - 1))
 

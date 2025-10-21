@@ -13,6 +13,8 @@ setup(
       'typing',
       'matplotlib',
       'numba>=0.58.1',
-      'iisignature'
+      'iisignature',
+      'simulation @ git+https://github.com/MrG1raffe/simulation.git',
+      'pricing @ git+https://github.com/MrG1raffe/pricing.git'
    ], #external packages as dependencies
 )

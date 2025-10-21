@@ -4,7 +4,7 @@ import jax.scipy.special as jsp
 from typing import Union
 
 from .tensor_sequence import TensorSequence
-from .words import word_len, word_to_base_dim_number, index_to_word_len
+from .words import word_len, word_to_base_dim_number, index_to_word_len, number_of_words_up_to_trunc
 from .factory import zero_like, unit_like
 
 
@@ -23,8 +23,10 @@ def tensor_prod_word(ts: TensorSequence, word: int) -> TensorSequence:
     word_length = word_len(word)
     word_dim_base = word_to_base_dim_number(word, dim=ts.dim)
     length_indices = index_to_word_len(indices, dim=ts.dim)
-    new_indices = (ts.dim ** length_indices * ts.dim ** word_length - 1) + \
-                   ts.dim ** word_length * (indices - ts.dim ** length_indices + 1) + word_dim_base
+    indices_dim_base = indices - number_of_words_up_to_trunc(length_indices - 1, ts.dim)
+
+    new_indices = number_of_words_up_to_trunc(length_indices + word_length - 1, ts.dim) + \
+                  ts.dim ** word_length * indices_dim_base + word_dim_base
 
     array = jnp.zeros_like(ts.array)
     array = array.at[new_indices].set(ts.array)
@@ -46,10 +48,11 @@ def _tensor_prod_index(ts: TensorSequence, index: int, coefficient: Union[float,
 
     dim = ts.dim
     other_len = index_to_word_len(jnp.array([index]), dim=dim)
-    other_dim_base = index - dim ** other_len + 1
+    other_dim_base = index - number_of_words_up_to_trunc(other_len - 1, dim)
     length_indices = index_to_word_len(indices, dim=dim)
-    new_indices = (dim ** length_indices * dim ** other_len - 1) + \
-                   dim ** other_len * (indices - dim ** length_indices + 1) + other_dim_base
+    indices_dim_base = indices - number_of_words_up_to_trunc(length_indices - 1, dim)
+    new_indices = number_of_words_up_to_trunc(length_indices + other_len - 1, ts.dim) + \
+                   dim ** other_len * indices_dim_base + other_dim_base
 
     array = jnp.zeros_like(ts.array)
     array = array.at[new_indices].set(ts.array * coefficient)
