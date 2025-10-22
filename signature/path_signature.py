@@ -82,7 +82,7 @@ def __path_to_fm_signature_const_lam(path: jax.Array, trunc: int, t_grid: jax.Ar
         lam = jnp.ones(dim) * lam
 
     dX = jnp.diff(path, axis=0, prepend=path[0:1, :])
-    dt = jnp.diff(t_grid, prepend=t_grid[0])
+    dt = jnp.diff(t_grid, prepend=t_grid[0:1])
 
     dt_col = dt.reshape((-1, 1))
     lam_row = lam.reshape((1, -1))
@@ -130,7 +130,7 @@ def __path_to_fm_signature_vector_lam(path: jax.Array, trunc: int, t_grid: jax.A
     if len(lam) == 1:
         lam = jnp.ones(dim) * lam
 
-    dt = jnp.diff(t_grid, prepend=t_grid[0])
+    dt = jnp.diff(t_grid, prepend=t_grid[0:1])
     dX = jnp.where(dt[:, None] * np.ones(dim) != 0, jnp.diff(path, axis=0, prepend=path[0:1, :]) / dt[:, None], 0)
 
     n_indices = number_of_words_up_to_trunc(trunc, dim=dim)
