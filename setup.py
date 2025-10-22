@@ -9,7 +9,7 @@ setup(
    packages=find_packages(),
    install_requires=[
       'numpy>=1.23.0',
-      'jax',
+      'jax>=0.4.30',
       'typing',
       'matplotlib',
       'numba>=0.58.1',
