@@ -55,6 +55,19 @@ def path_to_signature(path: jax.Array, trunc: int, only_terminal_sig: bool = Fal
 
 
 def path_to_fm_signature(path: jax.Array, trunc: int, t_grid: jax.Array, lam: jax.Array) -> TensorSequence:
+    """
+    Computes the EFM-signature with coefficient lam corresponding to a given d-dimensional path on the
+    time grid t_grid up to the order trunc.
+
+    :param path: Path as jax.Array of shape (len(t_grid), d).
+    :param trunc: Truncation order, i.e. maximal order of coefficients to be calculated.
+    :param t_grid: Time grid as jax.Array. An increasing time grid from T0 <= 0 to T > 0. The signature is calculated
+        only for the positive values of grid.
+    :param lam: a vector or a scalar value of signature mean reversion coefficients.
+
+    :return: TensorSequence objet corresponding to a trajectory of signature of the path on t_grid corresponding
+        to the positive values t_grid[t_grid >= 0]
+    """
     lam = jnp.array(lam)
     if lam.size == 1 or np.allclose(lam, lam[0]):
         return __path_to_fm_signature_const_lam(path, trunc, t_grid, lam)
@@ -64,7 +77,7 @@ def path_to_fm_signature(path: jax.Array, trunc: int, t_grid: jax.Array, lam: ja
 
 def __path_to_fm_signature_const_lam(path: jax.Array, trunc: int, t_grid: jax.Array, lam: jax.Array) -> TensorSequence:
     """
-    Computes the stationary signature with coefficient lam corresponding to a given d-dimensional path on the
+    Computes the EFM-signature with coefficient lam corresponding to a given d-dimensional path on the
     time grid t_grid up to the order trunc.
 
     :param path: Path as jax.Array of shape (len(t_grid), d).
@@ -113,7 +126,7 @@ def __path_to_fm_signature_const_lam(path: jax.Array, trunc: int, t_grid: jax.Ar
 
 def __path_to_fm_signature_vector_lam(path: jax.Array, trunc: int, t_grid: jax.Array, lam: jax.Array) -> TensorSequence:
     """
-    Computes the stationary signature with coefficient lam corresponding to a given d-dimensional path on the
+    Computes the EFM-signature with coefficient lam corresponding to a given d-dimensional path on the
     time grid t_grid up to the order trunc.
 
     :param path: Path as jax.Array of shape (len(t_grid), d).

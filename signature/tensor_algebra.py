@@ -11,7 +11,7 @@ from .tensor_product import tensor_prod_word, tensor_prod, tensor_pow, tensor_ex
 from .algebra_basis import AlgebraBasis
 from .path_signature import path_to_signature, path_to_fm_signature
 from .expected_signature import expected_bm_signature, expected_bm_stationary_signature
-from .operators import G, G_inv, G_resolvent, D, semi_integrated_scheme
+from .operators import G, G_inv, G_resolvent, D, semi_integrated_scheme, Psi, diamond
 from .tensor_sequence import TensorSequence
 from .projection import proj
 from .visualisation import plot_coefficients

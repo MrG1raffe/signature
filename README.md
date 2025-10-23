@@ -1,22 +1,35 @@
 # Signatures
-Implementation of tensor algebra methods and signature volatility model
 
+Implementation of tensor algebra methods for path signatures and exponentially fading-memory signature and its applications.
 
+---
 
-### To install iisignature
+## Installation
+Clone the repository
+```bash
+git clone https://github.com/MrG1raffe/signature
+cd signature
+```
 
-`pip install iisignature`
+(Optionally) create a new environment
+```bash
+conda env create -f environment.yml
+conda activate signature
+```
 
-- Versions of numpy and numba that work: numpy 1.23.0,  numba 0.58.1
+Install the package
+```bash
+pip isntall .
+```
 
-- Check that C++ compilers g++, gcc are installed
+### Notes on iisignature
+For the iisignature module to work correctly, make sure you have C++ compilers (g++, gcc) installed on your system.
 
-- Check the dynamic libraries loaded by the `.so` file that is causing the issue to ensure that it is using the correct `libstdc++`.
-
-  ##### Use `ldd` to check the dependencies:
-
-  ```
-  ldd /home/mr_giraffe/anaconda3/lib/python3.8/site-packages/iisignature.cpython-38-x86_64-linux-gnu.so
-  ```
-
-  libstdc++ should point to the system version, not to the one of Anaconda. Otherwise, it may cause `undefined symbol: _ZSt28__throw_bad_array_new_lengthv` error.
+On Ubuntu or Debian-based systems:
+```bash
+sudo apt install build-essential
+```
+On macOS (with Xcode Command Line Tools):
+```bash
+xcode-select --install
+```
