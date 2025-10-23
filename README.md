@@ -19,7 +19,8 @@ conda activate signature
 
 Install the package
 ```bash
-pip isntall .
+pip install .
+pip install iisignature
 ```
 
 ### Notes on iisignature
