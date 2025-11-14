@@ -21,7 +21,7 @@ def expected_bm_signature(t: Union[float, jax.Array], trunc: int) -> TensorSeque
     """
     # w = (1 + 0.5 * 22) * t
     w = get_1_22(trunc) * jnp.reshape(t, (1, -1))
-    return tensor_exp(ts=w, N_trunc=trunc)
+    return tensor_exp(ts=w)
 
 
 def expected_bm_stationary_signature(trunc: int, lam: jax.Array, t: float = None, n_points: int = 100) -> TensorSequence:
@@ -57,7 +57,7 @@ def expected_bm_stationary_signature(trunc: int, lam: jax.Array, t: float = None
 def get_1_22(trunc: int) -> TensorSequence:
     array = jnp.zeros(number_of_words_up_to_trunc(trunc, 2))
     array = array.at[jnp.array([1, 6])].set(jnp.array([1, 0.5]))
-    return TensorSequence(array=array, trunc=trunc, dim=2)
+    return TensorSequence(array=array.reshape((-1, 1)), trunc=trunc, dim=2)
 
 
 @jax.jit
