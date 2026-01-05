@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from ..shuffle_product import shuffle_prod
 from ..shuffle_table import get_shuffle_table
 from ..tensor_sequence import TensorSequence
-from ..expected_signature import expected_bm_stationary_signature, expected_bm_signature
+from ..expected_signature import expected_bm_fm_signature, expected_bm_signature
 from ..path_signature import path_to_fm_signature, path_to_signature
 from ..signature_of_signature import get_signature_of_linear_form
 from ..words import number_of_words_up_to_trunc, index_to_word_vect, index_to_word
@@ -142,7 +142,7 @@ class StatSigSignal:
         brownian_motion = diffusion.brownian_motion()[0, 0, :]
         path = np.vstack([t_grid_extended, brownian_motion]).T
         self.SigS = path_to_fm_signature(path=path, trunc=self.trunc, t_grid=t_grid_extended - t_grid[0], lam=self.lam * np.ones(2))
-        self.eSSig = expected_bm_stationary_signature(trunc=self.trunc * self.trunc_signature_moments, lam=lam)
+        self.eSSig = expected_bm_fm_signature(trunc=self.trunc * self.trunc_signature_moments, lam=lam)
 
     def fit(self, signal: NDArray[float64]):
         signal_mean = np.mean(signal)

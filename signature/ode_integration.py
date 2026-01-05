@@ -52,8 +52,7 @@ def step_fun_semi_int_euler(psi: TensorSequence, dt: float, fun: Callable, args:
 def step_fun_semi_int_pece(psi: TensorSequence, dt: float, fun: Callable, args: dict) -> TensorSequence:
     fun_psi = fun(psi, args)
     psi_pred = D(ts=psi, dt=dt, lam=args["lam"]) + semi_integrated_scheme(ts=fun_psi, dt=dt, lam=args["lam"])
-    psi_next = D(ts=psi, dt=dt, lam=args["lam"]) + \
-               semi_integrated_scheme(ts=(fun(psi_pred, args) + fun_psi) * 0.5, dt=dt, lam=args["lam"])
+    psi_next = D(ts=psi, dt=dt, lam=args["lam"]) + semi_integrated_scheme(ts=(fun(psi_pred, args) + fun_psi) * 0.5, dt=dt, lam=args["lam"])
     return psi_next
 
 

@@ -54,6 +54,23 @@ def D(ts: TensorSequence, dt: float, lam: jax.Array) -> TensorSequence:
     lams_shape = (-1, ) + (1, ) * (len(ts.array.shape) - 1)
     return TensorSequence(array=ts.array * jnp.reshape(jnp.exp(-lams * dt), lams_shape), trunc=ts.trunc, dim=ts.dim)
 
+@jax.jit
+def D_timedep(ts: TensorSequence, dt: jax.Array, lam: jax.Array) -> TensorSequence:
+    """
+    A discounting operator with discounting rate lambda and discounting period dt.
+    Multiplies the coefficient l^v by exp(-lam(v) * dt), where
+    lam(v) = sum of lam[i] for i in v.
+
+    :param ts: tensor sequence to discount.
+    :param dt: length of the discounting period.
+    :param lam: discounting rate.
+
+    :return: Discounted tensor sequence.
+    """
+    lams = ts.get_lambdas_sum_array(lam)
+    lams_shape = (lams.size, ) + (dt.size, ) + (1, ) * (len(ts.array.shape) - 2)
+    return TensorSequence(array=ts.array * jnp.reshape(jnp.exp(-jnp.outer(lams, dt)), lams_shape), trunc=ts.trunc, dim=ts.dim)
+
 
 @jax.jit
 def G_resolvent(ts: TensorSequence, lam: jax.Array) -> TensorSequence:
@@ -162,3 +179,4 @@ def diamond(ts1: TensorSequence, ts2: TensorSequence, letter_upper: int, letter_
     return 0.5 * (Psi(shuffle_prod(ts1, ts2, shuffle_table), word_upper, word_lower) -
                   shuffle_prod(ts1, Psi(ts2, word_upper, word_lower), shuffle_table) -
                   shuffle_prod(Psi(ts1, word_upper, word_lower), ts2, shuffle_table))
+

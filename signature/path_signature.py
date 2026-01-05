@@ -46,7 +46,7 @@ def path_to_signature(path: jax.Array, trunc: int, only_terminal_sig: bool = Fal
     elif path.ndim == 3:
         dim = path.shape[1]
         array = np.zeros((number_of_words_up_to_trunc(trunc=trunc, dim=dim), path.shape[0], path.shape[2]))
-        for i in tqdm(range(path.shape[2])):
+        for i in range(path.shape[2]):
             array[:, :, i] = __2d_path_to_array(path=path[:, :, i], trunc=trunc)
     else:
         raise ValueError("Dimension of path should be less than 3.")

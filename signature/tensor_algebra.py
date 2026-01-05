@@ -10,8 +10,8 @@ from .shuffle_product import shuffle_prod, shuffle_prod_2d, shuffle_pow, shuffle
 from .tensor_product import tensor_prod_word, tensor_prod, tensor_pow, tensor_exp, resolvent
 from .algebra_basis import AlgebraBasis
 from .path_signature import path_to_signature, path_to_fm_signature
-from .expected_signature import expected_bm_signature, expected_bm_stationary_signature
-from .operators import G, G_inv, G_resolvent, D, semi_integrated_scheme, Psi, diamond
+from .expected_signature import expected_bm_signature, expected_bm_fm_signature
+from .operators import G, G_inv, G_resolvent, D, D_timedep, semi_integrated_scheme, Psi, diamond
 from .tensor_sequence import TensorSequence
-from .projection import proj
+from .projection import proj, left_proj_on_seq, right_proj_on_seq
 from .visualisation import plot_coefficients

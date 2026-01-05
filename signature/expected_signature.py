@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 from typing import Union
 
+from build.lib.signature.ode_integration import ode_solver_traj
 from .tensor_sequence import TensorSequence
 from .operators import G_inv
 from .factory import unit
@@ -24,7 +25,8 @@ def expected_bm_signature(t: Union[float, jax.Array], trunc: int) -> TensorSeque
     return tensor_exp(ts=w)
 
 
-def expected_bm_stationary_signature(trunc: int, lam: jax.Array, t: float = None, n_points: int = 100) -> TensorSequence:
+def expected_bm_fm_signature(trunc: int, lam: jax.Array, t: float = None,
+                             n_points: int = 100, t_grid: jax.Array = None) -> TensorSequence:
     """
     Computes expected stationary lambda-signature of X_t = (t, W_t). If t is not specified,
     computes stationary expected signature E^lam = E[SigX^lam]. Otherwise, computes E_t^lam = E[SigX_{0, t}^lam].
@@ -33,6 +35,7 @@ def expected_bm_stationary_signature(trunc: int, lam: jax.Array, t: float = None
     :param lam: stationary signature parameter.
     :param t: time index of the expected signature. By default, t = inf, which corresponds to stationary signature.
     :param n_points: number of points to be used to solve an SDE on E_t^lam.
+    :param t_grid: grid of time points used to solve an SDE on E_t^lam. If specified, the function returns the values of E_t^lam on the grid.
 
     :return: expected signature as a TensorSequence instance.
     """
@@ -48,10 +51,14 @@ def expected_bm_stationary_signature(trunc: int, lam: jax.Array, t: float = None
             res = res + v
         return res
     else:
-        t_grid = jnp.linspace(0, t, n_points)
         args = {"lam": lam}
-        return ode_solver(fun=__expected_sig_ode_func, step_fun=step_fun_semi_int_pece,
-                          t_grid=t_grid, init=unit(trunc, dim), args=args)
+        if t_grid is None:
+            t_grid = jnp.linspace(0, t, n_points)
+            return ode_solver(fun=__expected_sig_ode_func, step_fun=step_fun_semi_int_pece,
+                              t_grid=t_grid, init=unit(trunc, dim), args=args)
+        else:
+            return ode_solver_traj(fun=__expected_sig_ode_func, step_fun=step_fun_semi_int_pece,
+                                   t_grid=t_grid, init=unit(trunc, dim), args=args)
 
 
 def get_1_22(trunc: int) -> TensorSequence:
