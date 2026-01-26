@@ -2,7 +2,9 @@ import jax
 import jax.numpy as jnp
 from typing import Union
 
-from build.lib.signature.ode_integration import ode_solver_traj
+#from build.lib.signature.ode_integration import ode_solver_traj
+from signature.ode_integration import ode_solver_traj
+
 from .tensor_sequence import TensorSequence
 from .operators import G_inv
 from .factory import unit
