@@ -6,8 +6,6 @@ import jax.scipy.special as jsp
 import iisignature
 from functools import partial
 
-from tqdm import tqdm
-
 from .tensor_sequence import TensorSequence
 from .operators import D
 from .tensor_product import tensor_prod
@@ -70,27 +68,6 @@ def path_to_fm_signature(path: jax.Array, trunc: int, t_grid: jax.Array, lam: ja
     :return: TensorSequence objet corresponding to a trajectory of signature of the path on t_grid corresponding
         to the positive values t_grid[t_grid >= 0]
     """
-    lam = jnp.array(lam)
-    if lam.size == 1 or np.allclose(lam, lam[0]):
-        return __path_to_fm_signature_const_lam(path, trunc, t_grid, lam)
-    else:
-        return __path_to_fm_signature_vector_lam(path, trunc, t_grid, lam)
-
-
-def __path_to_fm_signature_const_lam(path: jax.Array, trunc: int, t_grid: jax.Array, lam: jax.Array) -> TensorSequence:
-    """
-    Computes the EFM-signature with coefficient lam corresponding to a given d-dimensional path on the
-    time grid t_grid up to the order trunc.
-
-    :param path: Path as jax.Array of shape (len(t_grid), d).
-    :param trunc: Truncation order, i.e. maximal order of coefficients to be calculated.
-    :param t_grid: Time grid as jax.Array. An increasing time grid from T0 < 0 to T > 0. The signature is calculated
-        only for the positive values of grid.
-    :param lam: signature mean reversion coefficient.
-
-    :return: TensorSequence objet corresponding to a trajectory of signature of the path on t_grid corresponding
-        to the positive values t_grid[t_grid >= 0]
-    """
     dim = path.shape[1]
 
     if lam.size == 1:
@@ -99,14 +76,55 @@ def __path_to_fm_signature_const_lam(path: jax.Array, trunc: int, t_grid: jax.Ar
     dX = jnp.diff(path, axis=0, prepend=path[0:1, :])
     dt = jnp.diff(t_grid, prepend=t_grid[0:1])
 
+    if jnp.allclose(lam, lam[0]):
+        dX_sig = __compute_inc_sig_constant_lam(dX=dX, dt=dt, lam=lam, dim=dim, trunc=trunc)
+    else:
+        dX_sig = __compute_inc_sig_vector_lam(dX=dX, dt=dt, lam=lam, dim=dim, trunc=trunc)
+
+    acc_array = chen_cum_prod_efm(dX_sig, dt, trunc, lam, dim)
+
+    return TensorSequence(array=acc_array[:, t_grid >= 0], trunc=trunc, dim=dim)
+
+
+def path_to_rolling_signature(path: jax.Array, trunc: int, window_size: int) -> TensorSequence:
+    """
+    Computes the rolling window signature with given window size corresponding to a given d-dimensional path
+    up to the order trunc.
+
+    :param path: Path as jax.Array of shape (len(t_grid), d).
+    :param trunc: Truncation order, i.e. maximal order of coefficients to be calculated.
+    :param window_size: At each time t, the signature is computed over the last `window_size` time steps.
+
+    :return: TensorSequence objet corresponding to a trajectory of rolling signature of the path.
+    """
+    dim = path.shape[1]
+
+    dX = jnp.diff(path, axis=0, prepend=path[0:1, :])
+    dt = jnp.ones(dX.shape[0])
+
+    dX_sig = __compute_inc_sig_constant_lam(dX=dX, dt=dt, lam=jnp.zeros(dim), dim=dim, trunc=trunc)
+
+    level_signs = (-1) ** dX_sig.subsequence((0,)).get_lengths_array()
+    dX_sig_array_shifted_inv = jnp.zeros_like(dX_sig.array.T)
+    dX_sig_array_shifted_inv = dX_sig_array_shifted_inv.at[:window_size, 0:1].set(1)
+    # Shifting the increments by window_size.
+    # inverting the tensor exponential by multiplying each element by (-1)^level.
+    dX_sig_array_shifted_inv = dX_sig_array_shifted_inv.at[window_size:].set(dX_sig.array.T[:-window_size]) * level_signs
+
+    acc_array = chen_cum_prod_rolling(dX_sig=dX_sig, trunc=trunc, dim=dim, dX_sig_array_shifted_inv=dX_sig_array_shifted_inv)
+
+    return TensorSequence(array=acc_array, trunc=trunc, dim=dim)
+
+
+def __compute_inc_sig_constant_lam(dX: jax.Array, dt: jax.Array, lam: jax.Array, dim: int, trunc: int):
     dt_col = dt.reshape((-1, 1))
     lam_row = lam.reshape((1, -1))
-    c = jnp.where(dt_col * jnp.ones((1, dim)) > 0,
+    c = jnp.where((dt_col * jnp.ones((1, dim)) > 0) & (~jnp.allclose(lam_row, 0)),
                   (1 - jnp.exp(-lam_row * dt_col)) / (lam_row * dt_col), 1)
     path_inc = dX * c
 
     n_indices = number_of_words_up_to_trunc(trunc, dim=dim)
-    dX_sig_array = jnp.zeros((n_indices, t_grid.size))
+    dX_sig_array = jnp.zeros((n_indices, dt.size))
     dX_sig_array = dX_sig_array.at[0].set(1)
 
     # Calculates step arrays: each array array_steps[:, k] corresponds to the signature bb{X}_{t_k, t_{k + 1}}.
@@ -120,13 +138,9 @@ def __path_to_fm_signature_const_lam(path: jax.Array, trunc: int, t_grid: jax.Ar
 
     # A more efficient computation of tensor_exp(e_1 + e_2 + ... + e_d)
     dX_sig = TensorSequence(array=dX_sig_array, trunc=trunc, dim=dim)
+    return dX_sig
 
-    acc_array = chen_cum_prod_stat(dX_sig, dt, trunc, lam, dim)
-
-    return TensorSequence(array=acc_array[:, t_grid >= 0], trunc=trunc, dim=dim)
-
-
-def __path_to_fm_signature_vector_lam(path: jax.Array, trunc: int, t_grid: jax.Array, lam: jax.Array) -> TensorSequence:
+def __compute_inc_sig_vector_lam(dX: jax.Array, dt: jax.Array, lam: jax.Array, dim: int, trunc: int):
     """
     Computes the EFM-signature with coefficient lam corresponding to a given d-dimensional path on the
     time grid t_grid up to the order trunc.
@@ -140,17 +154,9 @@ def __path_to_fm_signature_vector_lam(path: jax.Array, trunc: int, t_grid: jax.A
     :return: TensorSequence objet corresponding to a trajectory of signature of the path on t_grid corresponding
         to the positive values t_grid[t_grid >= 0]
     """
-    dim = path.shape[1]
-
-    if len(lam) == 1:
-        lam = jnp.ones(dim) * lam
-
-    dt = jnp.diff(t_grid, prepend=t_grid[0:1])
-    dX = jnp.where(dt[:, None] * np.ones(dim) != 0, jnp.diff(path, axis=0, prepend=path[0:1, :]) / dt[:, None], 0)
-
     n_indices = number_of_words_up_to_trunc(trunc, dim=dim)
     words = index_to_word_vect(jnp.arange(n_indices), dim)
-    dX_sig_array = np.zeros((n_indices, t_grid.size), dtype=float)
+    dX_sig_array = np.zeros((n_indices, dt.size), dtype=float)
     dX_sig_array[0] = 1
 
     # Calculates step arrays: each array array_steps[:, k] corresponds to the signature bb{X}_{t_k, t_{k + 1}}.
@@ -162,7 +168,7 @@ def __path_to_fm_signature_vector_lam(path: jax.Array, trunc: int, t_grid: jax.A
         dX_sig_array[idx_start:idx_start + dim ** n] = tp_n.T
         tp_n = jnp.einsum("ij,ik->ijk", tp_n, dX).reshape((dX.shape[0], -1))
 
-    # Computes the FM-signature of linear path word by word.
+    # Computes the EFM-signature of linear path word by word.
     for i, word in enumerate(words):
         if i > 0:
             word_as_indices = jnp.array([int(letter) - 1 for letter in str(word)])
@@ -171,14 +177,11 @@ def __path_to_fm_signature_vector_lam(path: jax.Array, trunc: int, t_grid: jax.A
 
     # A more efficient computation of tensor_exp(e_1 + e_2 + ... + e_d)
     dX_sig = TensorSequence(array=dX_sig_array, trunc=trunc, dim=dim)
-
-    acc_array = chen_cum_prod_stat(dX_sig, dt, trunc, lam, dim)
-
-    return TensorSequence(array=acc_array[:, t_grid >= 0], trunc=trunc, dim=dim)
+    return dX_sig
 
 
 @jax.jit
-def chen_cum_prod_stat(dX_sig, dt, trunc, lam, dim) -> jax.Array:
+def chen_cum_prod_efm(dX_sig, dt, trunc, lam, dim) -> jax.Array:
     """
     Transforms the signature bb{X}_{t_k, t_{k + 1}} of linear paths into the signature bb{X}_{t_{k + 1}}
     using the Chen's identity.
@@ -203,3 +206,29 @@ def fm_sig_from_word(dt, lambda_word):
     mu_diff = mu[:, None] - mu[None, :]
     c = jnp.prod(jnp.where(mu_diff == 0, 1, 1 / mu_diff), axis=0)
     return jnp.exp(-mu * dt) @ c
+
+
+@jax.jit
+def chen_cum_prod_rolling(dX_sig, trunc, dim, dX_sig_array_shifted_inv: jax.Array) -> jax.Array:
+    """
+    Transforms the signature bb{X}_{t_k, t_{k + 1}} of linear paths into the signature
+    bb{X}_{t_{k + 1 - window_size}, t_{k + 1}} using the Chen's identity.
+    """
+
+    def f(carry, x: TensorSequence):
+        dx_arr, dx_arr_shifted_inv = x
+        result_array = tensor_prod(
+            tensor_prod(
+                TensorSequence(dx_arr_shifted_inv, trunc=trunc, dim=dim),
+                TensorSequence(carry, trunc=trunc, dim=dim)
+            ),
+            TensorSequence(dx_arr, trunc=trunc, dim=dim)
+        ).array
+        return result_array, result_array
+
+    init = jnp.zeros(len(dX_sig))
+    init = init.at[0].set(1)
+
+    _, ys = jax.lax.scan(f=f, init=init, xs=(dX_sig.array.T, dX_sig_array_shifted_inv))
+
+    return ys.T

@@ -9,7 +9,7 @@ from .shuffle_table import get_shuffle_table
 from .shuffle_product import shuffle_prod, shuffle_prod_2d, shuffle_pow, shuffle_exp
 from .tensor_product import tensor_prod_word, tensor_prod, tensor_pow, tensor_exp, resolvent
 from .algebra_basis import AlgebraBasis
-from .path_signature import path_to_signature, path_to_fm_signature
+from .path_signature import path_to_signature, path_to_fm_signature, path_to_rolling_signature
 from .expected_signature import expected_bm_signature, expected_bm_fm_signature
 from .operators import G, G_inv, G_resolvent, D, D_timedep, semi_integrated_scheme, Psi, diamond
 from .tensor_sequence import TensorSequence
