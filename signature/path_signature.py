@@ -189,6 +189,15 @@ def __compute_inc_sig_vector_lam(dX: jax.Array, dt: jax.Array, lam: jax.Array, d
 
 
 @jax.jit
+@partial(jax.vmap, in_axes=(0, None))
+def fm_sig_from_word(dt, lambda_word):
+    mu = jnp.concatenate([jnp.zeros(1), jnp.cumsum(lambda_word)])
+    mu_diff = mu[:, None] - mu[None, :]
+    c = jnp.prod(jnp.where(mu_diff == 0, 1, 1 / mu_diff), axis=0)
+    return jnp.where(dt > 0, (jnp.exp(-mu * dt) @ c) / dt**lambda_word.size, 1 / jsp.factorial(lambda_word.size))
+
+
+@jax.jit
 def chen_cum_prod_efm(dX_sig, dt, trunc, lam, dim) -> jax.Array:
     """
     Transforms the signature bb{X}_{t_k, t_{k + 1}} of linear paths into the signature bb{X}_{t_{k + 1}}
@@ -206,14 +215,6 @@ def chen_cum_prod_efm(dX_sig, dt, trunc, lam, dim) -> jax.Array:
     _, ys = jax.lax.scan(f=f, init=init, xs=(dt, dX_sig.array.T))
 
     return ys.T
-
-@jax.jit
-@partial(jax.vmap, in_axes=(0, None))
-def fm_sig_from_word(dt, lambda_word):
-    mu = jnp.concatenate([jnp.zeros(1), jnp.cumsum(lambda_word)])
-    mu_diff = mu[:, None] - mu[None, :]
-    c = jnp.prod(jnp.where(mu_diff == 0, 1, 1 / mu_diff), axis=0)
-    return jnp.where(dt > 0, (jnp.exp(-mu * dt) @ c) / dt**lambda_word.size, 1 / jsp.factorial(lambda_word.size))
 
 
 @jax.jit

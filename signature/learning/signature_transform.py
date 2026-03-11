@@ -6,8 +6,6 @@ from sklearn.utils.validation import check_is_fitted
 from typing import Union
 from abc import ABC, abstractmethod
 
-from win32inetcon import FLAGS_ERROR_UI_SERIALIZE_DIALOGS
-
 from signature.path_signature import path_to_signature, path_to_rolling_signature, path_to_fm_signature
 from signature.learning.lead_lag import lead_lag_transform, efm_lead_lag_transform
 
