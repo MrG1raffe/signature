@@ -33,7 +33,7 @@ def tscv_loop(X, y, model, n_splits: int = 5, burn_in: int = 0):
     return avg_mse
 
 
-def grid_search_cv_efm(X, y, model, param_grid, burn_in, n_splits=5):
+def grid_search_cv(X, y, model, param_grid, burn_in, n_splits=5):
     """
     Performs a Grid Search over lambda and alpha while preserving path continuity.
     """
@@ -81,7 +81,7 @@ def grid_search_efm(X, y, model, param_grid, burn_in):
     return best_params, results_df
 
 
-def optimize_lam_cv(X, y, model, burn_in, bounds, n_splits=5, init_guess = None):
+def optimize_lam_cv(X, y, model, burn_in, bounds, n_splits=5, init_guess = None, optimizer: str = "Powell"):
     def loss(x):
         # Update lambda in the transformer
         model.set_params(sig__lam=x)
@@ -99,7 +99,7 @@ def optimize_lam_cv(X, y, model, burn_in, bounds, n_splits=5, init_guess = None)
         loss,
         x0=init_guess,
         bounds=bounds,
-        method='Powell',
+        method=optimizer,
         options={'xtol': 1e-3, 'ftol': 1e-3}
     )
     print(res)

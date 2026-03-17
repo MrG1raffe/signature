@@ -86,7 +86,7 @@ class RollingSignatureTransform(GenericSignatureTransform):
 
 
 class EFMSignatureTransform(GenericSignatureTransform):
-    def __init__(self, trunc: int, lam: Union[float, np.ndarray], lead_lag: bool = False, burn_in: int = 0, lead_lag_idx: jax.Array = None):
+    def __init__(self, trunc: int, lam: Union[float, np.ndarray], lead_lag: bool = False, burn_in: int = 0, lam_idx: jax.Array = None, lead_lag_idx: jax.Array = None):
         """
         Scikit-Learn wrapper for JAX-based EFM-signature computation. The first column of X must correspond to
         the time grid, while the signature transform is applied to X[:, 1:].
@@ -95,11 +95,17 @@ class EFMSignatureTransform(GenericSignatureTransform):
         :param lam: Mean-revrsion parameters of the EFM-signature.
         """
         super().__init__(trunc=trunc, lead_lag=lead_lag, burn_in=burn_in, time_flag=True, lead_lag_idx=lead_lag_idx)
+        self.lam_idx = lam_idx
         self.lam = np.asarray(lam)
 
     def _compute_signature(self, X_jax: jax.Array) -> jax.Array:
         dim = X_jax.shape[1] - 1 # the first column corresponds to the time grid and is not included in the path.
-        lam_arr = self.lam * jnp.ones(dim) if self.lam.size == 1 else self.lam
+        if self.lam_idx is not None:
+            lam_arr = self.lam[self.lam_idx]
+        elif self.lam.size == 1:
+            lam_arr = self.lam * jnp.ones(dim)
+        else:
+            lam_arr = self.lam
 
         if lam_arr.size != dim:
             raise ValueError(f'lam size must be 1 or {dim}, but is {self.lam.size}')
