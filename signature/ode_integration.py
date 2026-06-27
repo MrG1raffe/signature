@@ -15,9 +15,12 @@ def ode_solver(
     args: dict = None
 ) -> TensorSequence:
     dt = jnp.diff(t_grid)
+    args = {} if args is None else args
 
     def fori_fun(i, psi):
-        psi_next = step_fun(psi=psi, dt=dt[i], fun=fun, args=args)
+        # Expose the (reversed-time) integration step index to ``fun`` via ``args["i"]`` so that a
+        # time-dependent right-hand side (e.g. a time-dependent source) can select its slice.
+        psi_next = step_fun(psi=psi, dt=dt[i], fun=fun, args={**args, "i": i})
         return psi_next
 
     psi_res = jax.lax.fori_loop(lower=0, upper=len(dt), body_fun=fori_fun, init_val=init)
@@ -33,12 +36,16 @@ def ode_solver_traj(
     args: dict = None
 ) -> TensorSequence:
     dt_arr = jnp.diff(t_grid)
+    args = {} if args is None else args
 
-    def scan_fun(psi, dt):
-        psi_next = step_fun(psi=psi, dt=dt, fun=fun, args=args)
+    def scan_fun(psi, dt_and_i):
+        dt, i = dt_and_i
+        # ``args["i"]`` carries the integration step index (0 = terminal condition, in reversed
+        # time tau = T - t); ``fun`` may use it to pick a time-dependent slice of its data.
+        psi_next = step_fun(psi=psi, dt=dt, fun=fun, args={**args, "i": i})
         return psi_next, psi_next.array
 
-    psi_res, arr_res = jax.lax.scan(scan_fun, init=init, xs=dt_arr)
+    psi_res, arr_res = jax.lax.scan(scan_fun, init=init, xs=(dt_arr, jnp.arange(dt_arr.shape[0])))
     arr_res = jnp.vstack([init.array, arr_res])
     return TensorSequence(array=arr_res.T, trunc=init.trunc, dim=init.dim)
 

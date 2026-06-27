@@ -7,7 +7,7 @@ from typing import Union, Tuple
 import matplotlib.pyplot as plt
 
 from .words import (number_of_words_up_to_trunc, index_to_word, word_len, word_to_index,
-                    index_to_word_len, index_to_lam_sum_vect)
+                    index_to_word_len, index_to_lam_sum_vect, index_to_lam_prod_vect)
 
 
 @jdc.pytree_dataclass
@@ -123,7 +123,12 @@ class TensorSequence:
     @jax.jit
     def proj(self, word: int) -> TensorSequence:
         """
-        Calculates the projection of TensorSequence with respect to the given word.
+        Calculates the projection (right shift) of TensorSequence with respect to the given word.
+
+        Only the words ``u`` that *end* with ``word`` are kept, and the suffix ``word`` is removed
+        from each of them, so that the resulting sequence satisfies ``result^u = self^{u word}``.
+        See :meth:`left_proj` for the corresponding left shift. The implementation works for any
+        ``dim >= 1``; see ``doc/indexation_and_projections.md`` for the derivation.
 
         :param word: The word (as integer) to calculate the projection.
         :return: A new TensorSequence representing the projection.
@@ -132,13 +137,23 @@ class TensorSequence:
         word_length = word_len(word)
         word_index = word_to_index(word, dim=self.dim)
 
-        # A mask for indices to keep
-        indices_mask = (((indices - word_index) % self.dim ** word_length) == 0) & (indices >= word_index)
-
-        # Compute new indices
+        # Length |u| of the word carried by each index, and the length |u| - |word| of the word
+        # obtained once the suffix is stripped (clamped to stay non-negative; the shorter words
+        # are discarded by the mask below).
         length_arr = index_to_word_len(indices, dim=self.dim)
-        new_indices = jnp.where(self.dim == 1, indices - word_index, (indices - self.dim ** length_arr + 1) // self.dim ** word_length +
-                                self.dim ** (length_arr - word_length) - 1)
+        rest_length = jnp.maximum(length_arr - word_length, 0)
+
+        # Base-dim numbers: position of each word u and of ``word`` within their length blocks.
+        b_u = indices - number_of_words_up_to_trunc(length_arr - 1, dim=self.dim)
+        b_w = word_index - number_of_words_up_to_trunc(word_length - 1, dim=self.dim)
+        word_pow = self.dim ** word_length
+
+        # A mask for indices to keep: u must be at least as long as word and end with word,
+        # i.e. the trailing |word| letters of u (the low-order base-dim digits) equal word.
+        indices_mask = (length_arr >= word_length) & ((b_u % word_pow) == b_w)
+
+        # Compute new indices: drop the suffix, mapping u to its prefix u' of length |u| - |word|.
+        new_indices = number_of_words_up_to_trunc(rest_length - 1, dim=self.dim) + b_u // word_pow
         # Set out-of-bounds index for non-valid ones
         new_indices = jnp.where(indices_mask, new_indices, len(self) + 1)
 
@@ -147,6 +162,88 @@ class TensorSequence:
                                                     jnp.einsum("i..., i -> i...", self.array, indices_mask), 0))
 
         return TensorSequence(array=array, trunc=self.trunc, dim=self.dim)
+
+    @jax.jit
+    def left_proj(self, word: int) -> TensorSequence:
+        """
+        Calculates the left projection (left shift) of TensorSequence with respect to the given word.
+
+        Whereas :meth:`proj` strips ``word`` from the right (so that ``result^u = self^{u word}``),
+        this method strips ``word`` from the left: the resulting sequence satisfies
+        ``result^u = self^{word u}``. Only the words ``u`` that start with ``word`` are kept, and
+        the prefix ``word`` is removed from each of them.
+
+        :param word: The word (as integer) to calculate the left projection.
+        :return: A new TensorSequence representing the left projection.
+        """
+        indices = jnp.arange(len(self))
+        word_length = word_len(word)
+        word_index = word_to_index(word, dim=self.dim)
+
+        # Length |u| of the word carried by each index, and the length |u| - |word| of the
+        # word obtained once the prefix is stripped (clamped to stay non-negative; the shorter
+        # words are discarded by the mask below).
+        length_arr = index_to_word_len(indices, dim=self.dim)
+        rest_length = jnp.maximum(length_arr - word_length, 0)
+
+        # Base-dim numbers: position of each word and of ``word`` within their length blocks.
+        b_u = indices - number_of_words_up_to_trunc(length_arr - 1, dim=self.dim)
+        b_w = word_index - number_of_words_up_to_trunc(word_length - 1, dim=self.dim)
+        rest_pow = self.dim ** rest_length
+
+        # A mask for indices to keep: u must be at least as long as word and start with word,
+        # i.e. the leading |word| letters of u (the high-order base-dim digits) equal word.
+        indices_mask = (length_arr >= word_length) & ((b_u // rest_pow) == b_w)
+
+        # Compute new indices: drop the prefix, mapping u to its suffix u' of length |u| - |word|.
+        new_indices = number_of_words_up_to_trunc(rest_length - 1, dim=self.dim) + b_u - b_w * rest_pow
+        # Set out-of-bounds index for non-valid ones
+        new_indices = jnp.where(indices_mask, new_indices, len(self) + 1)
+
+        array = jnp.zeros_like(self.array)
+        array = array.at[new_indices].set(jnp.where(jnp.einsum("i..., i -> i...", jnp.ones_like(self.array), indices_mask),
+                                                    jnp.einsum("i..., i -> i...", self.array, indices_mask), 0))
+
+        return TensorSequence(array=array, trunc=self.trunc, dim=self.dim)
+
+    @jax.jit
+    def seminorm(self, x: TensorSequence) -> jax.Array:
+        """
+        Computes the seminorm ``|| . ||_X`` of this tensor sequence with respect to another
+        tensor sequence ``x`` representing a (group-like) signature X, as defined by equation
+        (3.2) of the paper:
+
+            ||p||_X = sum_{n >= 0} | sum_{|v| = n} p^v X^v |,
+
+        i.e. the words are grouped by their length ``n``, the level-``n`` pairing
+        ``sum_{|v| = n} p^v X^v`` is formed, and the seminorm is the sum over levels of the
+        absolute values of these pairings. This is the quantity controlling the convergence of
+        the signature series ``<p, X>`` and is shuffle-compatible (3.5).
+
+        :param x: A TensorSequence X (same ``dim``) against which the seminorm is computed.
+            Its trailing (e.g. batch/time) axes may differ from those of ``self`` and are
+            broadcast against them, so a single coefficient sequence can be evaluated against a
+            whole batch of signatures X at once.
+        :return: The seminorm as a real-valued array, broadcast over the trailing axes of the
+            coefficient arrays.
+        """
+        n_min = min(self.array.shape[0], x.array.shape[0])
+        a = self.array[:n_min]
+        b = x.array[:n_min]
+        # Align the trailing (batch/time) axes so the coefficient axis 0 lines up; this lets a
+        # single sequence (shape (n,)) broadcast against a batch of signatures (shape (n, size)).
+        while a.ndim < b.ndim:
+            a = a[..., None]
+        while b.ndim < a.ndim:
+            b = b[..., None]
+        # element-wise products p^v X^v for every word v up to the common length
+        products = a * b
+        # length |v| of the word carried by each index
+        lengths = index_to_word_len(jnp.arange(n_min), self.dim)
+        # sum the products level by level: level_pairings[n] = sum_{|v| = n} p^v X^v
+        level_pairings = jax.ops.segment_sum(products, lengths, num_segments=n_min)
+        # sum of the absolute values of the per-level pairings
+        return jnp.sum(jnp.abs(level_pairings), axis=0)
 
     def plot(self, trunc: int = None, ax: plt.axis = None, **kwargs) -> None:
         """
@@ -180,3 +277,7 @@ class TensorSequence:
     @jax.jit
     def get_lambdas_sum_array(self, lam: jax.Array) -> jax.Array:
         return index_to_lam_sum_vect(jnp.arange(len(self)), self.dim, lam)
+
+    @jax.jit
+    def get_lambdas_prod_array(self, lam: jax.Array) -> jax.Array:
+        return index_to_lam_prod_vect(jnp.arange(len(self)), self.dim, lam)

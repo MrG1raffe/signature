@@ -38,6 +38,26 @@ def G_inv(ts: TensorSequence, lam: jax.Array) -> TensorSequence:
 
 
 @jax.jit
+def dilation(ts: TensorSequence, c: jax.Array) -> TensorSequence:
+    """
+    Dilation operator: multiplies the coefficient ts^{i_1...i_n} by c_{i_1} * ... * c_{i_n}.
+
+    ``c`` may be a scalar (applied identically to every letter) or an array of size ``ts.dim``
+    giving a per-letter factor. The empty-word coefficient is left unchanged (empty product = 1).
+    This generalises :func:`D`, which is the dilation with c_i = exp(-lam_i * dt).
+
+    :param ts: tensor sequence to dilate.
+    :param c: scalar or array of size ts.dim of per-letter factors.
+
+    :return: dilation(ts) as a new instance of TensorSequence.
+    """
+    c = jnp.atleast_1d(jnp.asarray(c))
+    prods = ts.get_lambdas_prod_array(c)
+    prods_shape = (-1, ) + (1, ) * (len(ts.array.shape) - 1)
+    return TensorSequence(array=ts.array * prods.reshape(prods_shape), trunc=ts.trunc, dim=ts.dim)
+
+
+@jax.jit
 def D(ts: TensorSequence, dt: float, lam: jax.Array) -> TensorSequence:
     """
     A discounting operator with discounting rate lambda and discounting period dt.

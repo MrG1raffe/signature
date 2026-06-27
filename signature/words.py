@@ -99,6 +99,40 @@ def index_to_lam_sum(index: int, dim: int, lam: jax.Array) -> jnp.int64:
 
 
 @jax.jit
+def index_to_lam_prod(index: int, dim: int, lam: jax.Array) -> jax.Array:
+    """
+    Converts an index to the product of lam[i] over all letters i in the word corresponding to the index.
+
+    This is the multiplicative counterpart of :func:`index_to_lam_sum`: for the word
+    ``i_1 ... i_n`` it returns ``lam[i_1 - 1] * ... * lam[i_n - 1]`` (the empty word yields 1).
+
+    :param index: An integer representing the index to convert.
+    :param dim: the base dimension.
+    :param lam: A vector of per-letter factors. It must be 1-D; a length-1 ``lam`` is treated as a
+        scalar (the same factor for every letter), any other length is expected to be ``dim``.
+    :return: The product of the per-letter factors of the word corresponding to the given index.
+    """
+    index = jnp.asarray(index, dtype=jnp.int64)
+    dim = jnp.asarray(dim, dtype=jnp.int64)
+    length = jnp.where(dim == 1, index, jnp.floor(jnp.log2(index * (dim - 1) + 1) / jnp.log2(dim) + 1e-10).astype(jnp.int64))
+    rem = jnp.where(dim == 1, 0, index - (dim ** length - 1) // (dim - 1))
+    last = lam.shape[0] - 1  # static; clips the letter index so a length-1 lam acts as a scalar
+
+    def body_fun(i, state):
+        res, rem_inner = state
+        p = dim ** (length - 1 - i)
+        digit = (rem_inner // p).astype(jnp.int64)
+        rem_inner = rem_inner % p
+        res = res * lam[jnp.minimum(digit, last)]
+        return res, rem_inner
+
+    # Initial state is (1, reduced index)
+    res, _ = lax.fori_loop(lower=0, upper=length, body_fun=body_fun,
+                           init_val=(jnp.ones((), dtype=lam.dtype), rem))
+    return res
+
+
+@jax.jit
 def word_to_base_dim_number(word: int, dim: int) -> int:
     """
     Converts a word to the corresponding number with base `dim`.
@@ -140,3 +174,4 @@ word_to_base_dim_number_vect = jax.jit(jax.vmap(word_to_base_dim_number, in_axes
 word_to_index_vect = jax.jit(jax.vmap(word_to_index, in_axes=(0, None)))
 index_to_word_vect = jax.jit(jax.vmap(index_to_word, in_axes=(0, None)))
 index_to_lam_sum_vect = jax.jit(jax.vmap(index_to_lam_sum, in_axes=(0, None, None)))
+index_to_lam_prod_vect = jax.jit(jax.vmap(index_to_lam_prod, in_axes=(0, None, None)))

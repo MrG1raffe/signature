@@ -14,6 +14,9 @@ def _shuffle_prod_arr(
 ):
     index_left, index_right, index_result, count = shuffle_table
 
+    # Reshape count to broadcast over any trailing (batch/time) axes of the coefficient arrays,
+    # so that shuffle_prod/shuffle_pow work on batched tensor sequences of shape (n_words, ...).
+    count = count.reshape((-1,) + (1,) * (arr1.ndim - 1))
     source = count * arr1[index_left] * arr2[index_right]
     linear_result = jnp.zeros_like(arr1)  # keeps the same size as ts1.
     linear_result = linear_result.at[index_result].add(source)

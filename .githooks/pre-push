@@ -1,0 +1,24 @@
+#!/bin/sh
+#
+# pre-push hook: run the unit tests before every `git push`.
+# If the tests fail, the push is aborted (non-zero exit).
+#
+# Enable once per clone with:
+#     git config core.hooksPath .githooks
+#
+# Bypass in an emergency with:
+#     git push --no-verify
+
+# Run from the repository root regardless of where `git push` was invoked.
+repo_root=$(git rev-parse --show-toplevel) || exit 1
+cd "$repo_root" || exit 1
+
+echo "pre-push: running unit tests (python -m pytest tests/)..."
+python -m pytest tests/ -q
+status=$?
+
+if [ "$status" -ne 0 ]; then
+    echo "pre-push: tests FAILED -> push aborted. Use 'git push --no-verify' to bypass." >&2
+fi
+
+exit "$status"
